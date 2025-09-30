@@ -1,0 +1,33 @@
+{
+  // TypeScript config for an ESM (NodeNext) server project.
+  "compilerOptions": {
+    /* === Project structure === */
+    "rootDir": "src", // Where source files live
+    "outDir": "dist", // Where compiled files go
+
+    /* === Runtime & module system (ESM on Node) === */
+    "module": "NodeNext", // Use Node's ESM semantics
+    "moduleResolution": "NodeNext", // Resolve imports like Node ESM
+    "target": "ES2020", // Output JS features up to ES2020
+    "lib": ["ES2020"], // DOM not needed on server
+    "types": ["node"], // Node.js type definitions
+
+    /* === Emission options === */
+    "sourceMap": true, // Generate .map files
+    "declaration": true, // Emit .d.ts
+    "declarationMap": true, // .d.ts sourcemaps for IDEs
+
+    /* === Type-checking strictness === */
+    "strict": true, // Enable all strict checks
+    "noUncheckedIndexedAccess": true, // Safer index access on arrays/maps
+    "exactOptionalPropertyTypes": true, // Optional props are truly optional
+
+    /* === Interop & parsing helpers === */
+    "esModuleInterop": true, // Easier CJS interop
+    "resolveJsonModule": true, // Allow `import x from './x.json'`
+    "verbatimModuleSyntax": false, // Keep `import`/`export` normalized for NodeNext
+    "isolatedModules": true, // Each file can compile in isolation
+    "moduleDetection": "force", // Treat all files as modules
+    "skipLibCheck": true // Speed up by skipping .d.ts checks
+  }
+}

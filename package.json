@@ -1,0 +1,33 @@
+{
+  "name": "sales-ops-hub",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --watch src --exec \"node --loader ts-node/esm\" src/index.ts",
+    "build": "tsc",
+    "gcp-build": "npm run build",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18 <23"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google-cloud/pubsub": "^5.2.0",
+    "@google-cloud/tasks": "^6.2.0",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.5.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.5.2",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
