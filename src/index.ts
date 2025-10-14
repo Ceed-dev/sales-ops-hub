@@ -21,6 +21,8 @@ import {
 import { updateStats } from "./lib/telegram/stats.js";
 import { handleProposalFollowup } from "./lib/telegram/followup.js";
 
+import { runWeeklyReport } from "./lib/weeklyReport/runWeeklyReport.js";
+
 // -----------------------------------------------------------------------------
 // Firestore data types
 // -----------------------------------------------------------------------------
@@ -565,6 +567,51 @@ Please follow up when you have a moment.`;
     await deliveryRef.update({ deliveryId: deliveryRef.id });
 
     return res.status(500).json({ error: "slack_webhook_exception" });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// POST /tasks/weekly-report
+// -----------------------------------------------------------------------------
+// Handler for the scheduled weekly report job (triggered by Cloud Scheduler).
+//
+// Flow:
+// 1) (Optional) Authenticate the caller (OIDC or X-App-Task-Token).
+// 2) Load active report settings: reports_settings where enabled == true.
+// 3) For each setting (per chat/team/user):
+//    3.1 Build AI request payload (fetches recent messages internally)
+//    3.2 Call Vertex AI (Gemini) to produce a structured summary
+//    3.3 Persist the result under tg_chats/{chatId}/reports/{autoId}
+//    3.4 Send a formatted message to Slack
+//    3.5 Update execution status on the setting document (success/error)
+// 4) Return HTTP 200 with a short result payload; on fatal error return 500.
+//
+// Notes:
+// - Authentication: Prefer Cloud Run IAM + OIDC from Scheduler; otherwise use a
+//   shared header token (X-App-Task-Token) checked against an env var.
+// - Idempotency: This simple version does not lock; schedule cadence should avoid overlap.
+// - Config: Time window / model / prompt are code/ENV driven, not stored per setting.
+// -----------------------------------------------------------------------------
+
+app.post("/tasks/weekly-report", async (_req, res) => {
+  try {
+    // --- (1) Optional auth guard (uncomment if you use a header token) ---
+    // const expected = (process.env.APP_TASK_TOKEN || "").trim();
+    // const got = (req.get("X-App-Task-Token") || "").trim();
+    // if (expected && got !== expected) return res.status(403).json({ error: "forbidden" });
+
+    // --- (2) Kick off the orchestrator ---
+    // Orchestrates:
+    //  - Load settings
+    //  - For each target: build payload → summarize → save → Slack → update status
+    await runWeeklyReport();
+
+    // --- (3) Respond success quickly (Scheduler expects a short 2xx) ---
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    // --- (4) On unexpected failures, log and return 5xx so the caller can retry ---
+    console.error("[/tasks/weekly-report] error:", e);
+    return res.status(500).json({ ok: false, error: "weekly_report_failed" });
   }
 });
 
