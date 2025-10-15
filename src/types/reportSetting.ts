@@ -7,6 +7,13 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 
+export type ReportTarget = {
+  /** Entity type */
+  type: "chat" | "team" | "user" | "org";
+  /** Target ID (e.g., Telegram chatId) */
+  id: string;
+};
+
 export interface ReportSetting {
   // --- Identity / Labels (optional, for human readability) ---
   /** Display name for this setting (e.g., "JP Sales Weekly") */
@@ -20,12 +27,7 @@ export interface ReportSetting {
   /** Whether this setting is enabled */
   enabled: boolean;
   /** Target entity for which the report is generated */
-  target: {
-    /** Entity type */
-    type: "chat" | "team" | "user" | "org";
-    /** Target ID (e.g., Telegram chatId) */
-    id: string;
-  };
+  target: ReportTarget;
 
   // --- Output destinations (optional; falls back to code defaults) ---
   output: {
