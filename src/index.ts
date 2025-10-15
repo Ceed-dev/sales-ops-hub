@@ -22,6 +22,7 @@ import { updateStats } from "./lib/telegram/stats.js";
 import { handleProposalFollowup } from "./lib/telegram/followup.js";
 
 import { runWeeklyReport } from "./lib/weeklyReport/runWeeklyReport.js";
+import { ensureReportSetting } from "./lib/weeklyReport/ensureReportSetting.js";
 
 // -----------------------------------------------------------------------------
 // Firestore data types
@@ -143,7 +144,9 @@ app.post("/webhook/telegram", async (req, res) => {
     const chatSnap = await chatRef.get();
 
     if (!chatSnap.exists) {
-      // First time: create a full document
+      // ---------------------------------------------------------------------------
+      // 1) Create chat room document (first-time)
+      // ---------------------------------------------------------------------------
       const doc = buildNewChatRoomDoc({
         msg,
         type,
@@ -152,6 +155,80 @@ app.post("/webhook/telegram", async (req, res) => {
         botActivityHistoryEntry,
       });
       await chatRef.set(doc); // merge: false
+
+      // ---------------------------------------------------------------------------
+      // 2) Resolve identifiers (title)
+      // ---------------------------------------------------------------------------
+      const finalTitle = (
+        msg.chat?.title ??
+        ([msg.chat?.first_name, msg.chat?.last_name]
+          .filter(Boolean)
+          .join(" ")
+          .trim() ||
+          (msg.chat?.username
+            ? `@${msg.chat.username}`
+            : chatId
+              ? `chat:${chatId}`
+              : "Unknown Chat"))
+      )
+        .replace(/\s+/g, " ")
+        .trim();
+
+      // Skip creating report settings for private (1:1) chats; process only group/supergroup (and channel).
+      if (msg.chat?.type !== "private") {
+        // ---------------------------------------------------------------------------
+        // 3) Ensure weekly report setting (idempotent)
+        // ---------------------------------------------------------------------------
+        const created = await ensureReportSetting({
+          target: { type: "chat", id: chatId },
+          name: finalTitle,
+        });
+
+        // ---------------------------------------------------------------------------
+        // 4) Slack notify only when a setting was newly created
+        // ---------------------------------------------------------------------------
+        if (created) {
+          const text = [
+            "🆕 New chat detected — weekly report setting has been created.",
+            `• Title: *${finalTitle}*`,
+            `• Chat ID: \`${chatId}\``,
+            `• Created at: ${new Date().toISOString()}`,
+          ].join("\n");
+
+          const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+
+          if (!webhookUrl) {
+            console.warn(
+              "[slack] SLACK_WEBHOOK_URL is not set; skip Slack notification",
+            );
+          } else {
+            const startHr = process.hrtime.bigint();
+
+            try {
+              const resp = await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, mrkdwn: true, link_names: 1 }),
+              });
+
+              const durationMs = Number(
+                (process.hrtime.bigint() - startHr) / 1_000_000n,
+              );
+
+              if (!resp.ok) {
+                const respText = await resp.text();
+                console.warn(
+                  `[slack] post failed: ${resp.status} ${respText?.slice(0, 300) || ""}`,
+                );
+              } else {
+                console.log(`[slack] notified in ${durationMs}ms`);
+              }
+            } catch (e) {
+              console.warn("[slack] send error:", e);
+            }
+          }
+        }
+      }
     } else {
       // Later: partial update (latestMessage, lastActiveAt, etc.)
       const updateData = buildChatPartialUpdate({
