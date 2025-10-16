@@ -204,6 +204,77 @@ app.post("/webhook/telegram", async (req, res) => {
           return res.sendStatus(200);
         }
 
+        // Guard: Bot was added to a *private* (1:1) chat → always reject (even if added by an internal user).
+        if (msg.chat?.type === "private") {
+          const chatIdStr = String(msg.chat?.id ?? "");
+          const title = (msg.chat?.title ?? "").trim() || "(no title)";
+          const fromLabel =
+            (msg.from?.username
+              ? "@" + msg.from.username
+              : [msg.from?.first_name, msg.from?.last_name]
+                .filter(Boolean)
+                .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
+
+          // --- Slack notification (best-effort; non-blocking) ---
+          try {
+            const text = [
+              "⚠️ Bot was added to a *private* chat — leaving.",
+              `• Title: *${title}*`,
+              `• Chat ID: \`${chatIdStr}\``,
+              `• At: ${formatJST(Date.now())}`,
+              `• Added by: ${fromLabel}`,
+            ].join("\n");
+
+            const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+            if (!webhookUrl) {
+              console.warn(
+                "[slack] SLACK_WEBHOOK_URL is not set; skip Slack notification",
+              );
+            } else {
+              const startHr = process.hrtime.bigint();
+              const resp = await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, mrkdwn: true, link_names: 1 }),
+              });
+              const durationMs = Number(
+                (process.hrtime.bigint() - startHr) / 1_000_000n,
+              );
+              if (!resp.ok) {
+                const body = await resp.text();
+                console.warn(
+                  `[slack] post failed: ${resp.status} ${body?.slice(0, 300) || ""}`,
+                );
+              } else {
+                console.log(`[slack] notified in ${durationMs}ms`);
+              }
+            }
+          } catch (e) {
+            console.warn("[slack] send error:", e);
+          }
+
+          // --- Leave the private chat (best-effort) ---
+          try {
+            const api = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/leaveChat`;
+            const resp = await fetch(api, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: chatIdStr }),
+            });
+            if (!resp.ok) {
+              const body = await resp.text();
+              console.warn(
+                `[telegram] leaveChat failed: ${resp.status} ${body?.slice(0, 300) || ""}`,
+              );
+            }
+          } catch (e) {
+            console.warn("[telegram] leaveChat error:", e);
+          }
+
+          // Stop here: do not create/update any DB docs for this chat.
+          return res.sendStatus(200);
+        }
+
         botActivityHistoryEntry = {
           status: "active",
           ts: sentAt,
