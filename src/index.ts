@@ -9,7 +9,7 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 // Internal libraries (Firebase, utilities, Telegram helpers)
 // -----------------------------------------------------------------------------
 import { db } from "./lib/firebase.js";
-import { toUtcDayKey } from "./utils/time.js";
+import { toUtcDayKey, formatJST } from "./utils/time.js";
 import { isDuplicateUpdateId } from "./utils/updateCache.js";
 
 import { detectMessageType } from "./lib/telegram/messageType.js";
@@ -192,7 +192,7 @@ app.post("/webhook/telegram", async (req, res) => {
             "🆕 New chat detected — weekly report setting has been created.",
             `• Title: *${finalTitle}*`,
             `• Chat ID: \`${chatId}\``,
-            `• Created at: ${new Date().toISOString()}`,
+            `• Created at: ${formatJST(Date.now())}`,
           ].join("\n");
 
           const webhookUrl = process.env.SLACK_WEBHOOK_URL;
@@ -520,8 +520,8 @@ app.post("/tasks/notifications", async (req, res) => {
 
   const createdAt = job.createdAt?.toDate
     ? job.createdAt
-        .toDate()
-        .toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST"
+      .toDate()
+      .toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST"
     : "(no timestamp)";
 
   const mentions = job.targets.slack!.map((t) => `<@${t.userId}>`).join(" ");

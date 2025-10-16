@@ -52,3 +52,29 @@ export function toUtcDayKey(msUtc: number): string {
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Format a date as "YYYY/MM/DD HH:mm:ss JST" in Asia/Tokyo
+// Accepts Date | number(ms) | Firestore Timestamp
+// ─────────────────────────────────────────────────────────────────────────────
+export function formatJST(input: Date | number | Timestamp): string {
+  const date =
+    input instanceof Timestamp
+      ? input.toDate()
+      : typeof input === "number"
+        ? new Date(input)
+        : input;
+
+  const s = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+
+  return `${s} JST`; // Example: "2025/10/11 10:18:15 JST"
+}
