@@ -7,16 +7,20 @@ import { Timestamp, DocumentReference } from "firebase-admin/firestore";
 import { db } from "../firebase.js";
 import { jst1500On3rdDay } from "../../utils/time.js";
 import { hashId } from "../../utils/hash.js";
+import { isFromInternal } from "../isInternal.js";
 import { enqueueHttpEtaTask } from "../cloudTasks.js";
 import type { MessageType } from "../../types/message.js";
 import type { NotificationJobDoc } from "../../types/notification.js";
 
-/** Returns true when the message is a document whose caption contains "proposal". */
+/** Returns true when the message is a document whose caption contains "proposal"
+ *  AND it was sent by an internal member.
+ */
 export function shouldCreateProposalFollowup(
   msg: any,
   type: MessageType,
 ): boolean {
   if (type !== "document") return false;
+  if (!isFromInternal(msg?.from?.id)) return false;
   const cap = String(msg?.caption ?? "").toLowerCase();
   return cap.includes("proposal");
 }
@@ -45,11 +49,11 @@ export async function handleProposalFollowup(params: {
   // Optional file info (document only)
   const fileInfo = msg?.document
     ? {
-        fileId: msg.document.file_id ?? null,
-        fileName: msg.document.file_name ?? null,
-        mimeType: msg.document.mime_type ?? null,
-        fileSize: msg.document.file_size ?? null,
-      }
+      fileId: msg.document.file_id ?? null,
+      fileName: msg.document.file_name ?? null,
+      mimeType: msg.document.mime_type ?? null,
+      fileSize: msg.document.file_size ?? null,
+    }
     : null;
 
   // ETA: 3rd day 15:00 JST (as UTC Timestamp)
