@@ -12,6 +12,7 @@ import { db } from "./lib/firebase.js";
 import { isFromInternal } from "./lib/isInternal.js";
 import { toUtcDayKey, formatJST } from "./utils/time.js";
 import { isDuplicateUpdateId } from "./utils/updateCache.js";
+import { resolveSlackUserIdByTelegramId } from "./utils/resolveSlackUserId.js";
 
 import { detectMessageType } from "./lib/telegram/messageType.js";
 import { generateSummary } from "./lib/telegram/summary.js";
@@ -208,12 +209,19 @@ app.post("/webhook/telegram", async (req, res) => {
         if (msg.chat?.type === "private") {
           const chatIdStr = String(msg.chat?.id ?? "");
           const title = (msg.chat?.title ?? "").trim() || "(no title)";
-          const fromLabel =
+          // Build a human-readable fallback label (used when Slack userId cannot be resolved)
+          const humanFallback =
             (msg.from?.username
               ? "@" + msg.from.username
               : [msg.from?.first_name, msg.from?.last_name]
                 .filter(Boolean)
                 .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
+
+          // Try to resolve Slack userId from Telegram userId.
+          const slackUserId = await resolveSlackUserIdByTelegramId(
+            String(msg.from?.id ?? ""),
+          );
+          const addedBy = slackUserId ? `<@${slackUserId}>` : humanFallback;
 
           // --- Slack notification (best-effort; non-blocking) ---
           try {
@@ -222,7 +230,7 @@ app.post("/webhook/telegram", async (req, res) => {
               `• Title: *${title}*`,
               `• Chat ID: \`${chatIdStr}\``,
               `• At: ${formatJST(Date.now())}`,
-              `• Added by: ${fromLabel}`,
+              `• Added by: ${addedBy}`,
             ].join("\n");
 
             const webhookUrl = process.env.SLACK_WEBHOOK_URL;
@@ -343,12 +351,22 @@ app.post("/webhook/telegram", async (req, res) => {
         // 4) Slack notify only when a setting was newly created
         // ---------------------------------------------------------------------------
         if (created) {
+          const humanFallback =
+            (msg.from?.username
+              ? "@" + msg.from.username
+              : [msg.from?.first_name, msg.from?.last_name]
+                .filter(Boolean)
+                .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
+          const slackUserId = await resolveSlackUserIdByTelegramId(
+            String(msg.from?.id ?? ""),
+          );
+          const addedBy = slackUserId ? `<@${slackUserId}>` : humanFallback;
           const text = [
             "🆕 New chat detected — weekly report setting has been created.",
             `• Title: *${finalTitle}*`,
             `• Chat ID: \`${chatId}\``,
             `• Created at: ${formatJST(Date.now())}`,
-            `• Added by: ${msg.from?.username ? "@" + msg.from.username : [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown user"} (ID: ${msg.from?.id})`,
+            `• Added by: ${addedBy}`,
           ].join("\n");
 
           const webhookUrl = process.env.SLACK_WEBHOOK_URL;
