@@ -193,6 +193,7 @@ app.post("/webhook/telegram", async (req, res) => {
             `• Title: *${finalTitle}*`,
             `• Chat ID: \`${chatId}\``,
             `• Created at: ${formatJST(Date.now())}`,
+            `• Added by: ${msg.from?.username ? "@" + msg.from.username : [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(" ") || "Unknown user"} (ID: ${msg.from?.id})`,
           ].join("\n");
 
           const webhookUrl = process.env.SLACK_WEBHOOK_URL;
