@@ -56,9 +56,9 @@ app.use(express.json({ limit: "1mb" })); // default ~100kb, here set to 1MB
 // 3) Parse update and ensure idempotency (skip duplicate update_id).
 // 4) Pre-process: detect message type & build summary.
 // 5) Guard on bot-join:
-//    - If our bot was added by a NON-internal user → send Slack alert, leave the
-//      chat immediately, and STOP (no DB writes).
-//    - If added by an internal user → continue.
+//    - If added by a NON-internal user → send Slack alert, leave the chat, and STOP (no DB writes).
+//    - If added to a *private* (1:1) chat → always reject (alert, leave, STOP) even if the adder is internal.
+//    - Otherwise (internal user + non-private chat) → continue.
 // 6) Upsert tg_chats/{chatId}:
 //    - First-time: create full chat doc.
 //    - Otherwise: partial update (latest message, lastActiveAt, stats snapshot, etc.).
