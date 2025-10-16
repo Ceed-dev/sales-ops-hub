@@ -51,22 +51,33 @@ app.use(express.json({ limit: "1mb" })); // default ~100kb, here set to 1MB
 // Called by Telegram when a new update (message, join/leave event, etc.) occurs.
 //
 // Flow:
-// 1. Validate secret token (x-telegram-bot-api-secret-token header).
-// 2. Validate Content-Type (must be application/json).
-// 3. Parse update and ensure idempotency (skip duplicate update_id).
-// 4. Detect message type + generate summary.
-// 5. Upsert tg_chats/{chatId} (create or partial update).
-// 6. Save message under tg_chats/{chatId}/messages/{messageId} with TTL.
-// 7. Update chat stats (daily counts, peak, per-user, etc.).
-// 8. Upsert tg_users/{userId} (global per-user stats).
-// 9. Trigger proposal follow-up job if document caption includes "proposal".
-// 10. Return 200 (always respond quickly to Telegram).
+// 1) Validate secret token (x-telegram-bot-api-secret-token).
+// 2) Validate Content-Type (must be application/json).
+// 3) Parse update and ensure idempotency (skip duplicate update_id).
+// 4) Pre-process: detect message type & build summary.
+// 5) Guard on bot-join:
+//    - If our bot was added by a NON-internal user → send Slack alert, leave the
+//      chat immediately, and STOP (no DB writes).
+//    - If added by an internal user → continue.
+// 6) Upsert tg_chats/{chatId}:
+//    - First-time: create full chat doc.
+//    - Otherwise: partial update (latest message, lastActiveAt, stats snapshot, etc.).
+// 7) First-time only (non-private chats):
+//    - Ensure reports_settings/{chat:ID:weekly} exists (idempotent).
+//    - If created now, send Slack notification (Created at / Added by).
+// 8) Save message under tg_chats/{chatId}/messages/{messageId} with TTL
+//    (MESSAGE_TTL_DAYS).
+// 9) Update chat stats (daily buckets, peaks, per-user counters, etc.).
+// 10) Upsert tg_users/{userId} (global per-user snapshot).
+// 11) Trigger proposal follow-up job if needed.
+// 12) Return 200 (respond quickly to Telegram).
 //
 // Notes:
-// - Telegram requires a quick 200 response; heavy work must be async or via Tasks.
-// - Bot join/leave events are tracked in chat.botActivityHistory.
-// - Duplicate update_ids are skipped in-memory (short cache).
-// - Messages and users are persisted in Firestore with TTL + aggregates.
+// - Bot join/leave events are appended to chat.botActivityHistory.
+// - Private (1:1) chats are excluded from creating weekly report settings.
+// - Slack notifications are best-effort; failures never block main flow.
+// - Duplicate update_ids are skipped via a short in-memory cache.
+// - This endpoint currently reads update.message (extend to channel_post if needed).
 // -----------------------------------------------------------------------------
 app.post("/webhook/telegram", async (req, res) => {
   try {
