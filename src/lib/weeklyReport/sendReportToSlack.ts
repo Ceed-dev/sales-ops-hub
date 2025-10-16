@@ -56,11 +56,14 @@ export async function sendReportToSlack(
     const lines: string[] = [];
 
     // Header
-    lines.push(`🧾 *Weekly Report Summary*`);
+    lines.push(`📑 *Weekly Report Summary*`);
     lines.push(`Chat: *${chatTitle}*`);
     lines.push("━━━━━━━━━━━━━━━");
+    lines.push("");
+    lines.push(`*Summary:*`);
     lines.push(result.summary.trim());
-    lines.push("\n*Key Points:*");
+    lines.push("");
+    lines.push("*Key Points:*");
 
     // Bullet points with limited timeline details
     for (const bullet of result.bullets ?? []) {
