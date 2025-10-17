@@ -61,28 +61,34 @@ export async function sendReportToSlack(
     lines.push("━━━━━━━━━━━━━━━");
     lines.push("");
     lines.push(`*Summary:*`);
-    lines.push(result.summary.trim());
+    lines.push((result.summary || "").trim() || "No updates this week.");
     lines.push("");
-    lines.push("*Key Points:*");
 
-    // Bullet points with limited timeline details
-    for (const bullet of result.bullets ?? []) {
-      lines.push(`• *${bullet.point.trim()}*`);
+    const hasBullets =
+      Array.isArray(result.bullets) && result.bullets.length > 0;
 
-      // Add timeline info if available
-      if (bullet.timeline?.length) {
-        const timelineLines = bullet.timeline
-          .map((t) => {
-            const when = t.when
-              ? new Date(t.when).toISOString().split("T")[0]
-              : "";
-            const event = t.event ?? "";
-            const owner = t.owner ? ` (${t.owner})` : "";
-            const status = t.status ? ` — ${t.status}` : "";
-            return `  ↳ ${when}: ${event}${owner}${status}`;
-          })
-          .slice(0, 3); // show up to 3 per bullet
-        lines.push(...timelineLines);
+    if (hasBullets) {
+      lines.push("*Key Points:*");
+
+      // Bullet points with limited timeline details
+      for (const bullet of result.bullets ?? []) {
+        lines.push(`• *${bullet.point.trim()}*`);
+
+        // Add timeline info if available
+        if (bullet.timeline?.length) {
+          const timelineLines = bullet.timeline
+            .map((t) => {
+              const when = t.when
+                ? new Date(t.when).toISOString().split("T")[0]
+                : "";
+              const event = t.event ?? "";
+              const owner = t.owner ? ` (${t.owner})` : "";
+              const status = t.status ? ` — ${t.status}` : "";
+              return `  ↳ ${when}: ${event}${owner}${status}`;
+            })
+            .slice(0, 3); // show up to 3 per bullet
+          lines.push(...timelineLines);
+        }
       }
     }
 
