@@ -68,11 +68,12 @@ export type VertexRequestBody = {
  */
 export async function buildReportPayload(
   chatId: string,
+  chatTitle: string,
   opts: BuildOptions = {},
   systemText?: string,
-): Promise<{ body: VertexRequestBody; input: InputContext }> {
+): Promise<{ body: VertexRequestBody }> {
   const sysText = systemText ?? (await loadReportAiSectionPrompt());
-  const input = await buildInputContext(chatId, opts);
+  const input = await buildInputContext(chatId, chatTitle, opts);
 
   const body: VertexRequestBody = {
     systemInstruction: { parts: [{ text: sysText }] },
@@ -150,7 +151,7 @@ export async function buildReportPayload(
     },
   };
 
-  return { body, input };
+  return { body };
 }
 
 /**
@@ -158,18 +159,15 @@ export async function buildReportPayload(
  */
 export async function buildInputContext(
   chatId: string,
+  chatTitle: string,
   opts: BuildOptions = {},
 ): Promise<InputContext> {
   const { startISO, endISO, tz } = computePeriod(opts);
-  const { messages, chatTitle } = await fetchWeeklyMessages(
-    chatId,
-    startISO,
-    endISO,
-  );
+  const { messages } = await fetchWeeklyMessages(chatId, startISO, endISO);
 
   return {
     period: { startISO, endISO, tz },
-    target: { type: "chat", id: chatId, name: chatTitle ?? `chat:${chatId}` },
+    target: { type: "chat", id: chatId, name: chatTitle },
     messages,
   };
 }
@@ -183,7 +181,7 @@ async function fetchWeeklyMessages(
   chatId: string,
   startISO: string,
   endISO: string,
-): Promise<{ messages: InputContextMessage[]; chatTitle?: string }> {
+): Promise<{ messages: InputContextMessage[] }> {
   const startTs = Timestamp.fromDate(new Date(startISO));
   const endTs = Timestamp.fromDate(new Date(endISO));
   const col = db.collection("tg_chats").doc(chatId).collection("messages");
@@ -195,7 +193,6 @@ async function fetchWeeklyMessages(
     .get();
 
   const out: InputContextMessage[] = [];
-  let chatTitle: string | undefined;
 
   snap.forEach((doc: QueryDocumentSnapshot) => {
     const d = doc.data() as any;
@@ -242,9 +239,6 @@ async function fetchWeeklyMessages(
     const safeSentAt = sentAtIso ?? startISO; // fallback to period start if missing
     const safeText = text ?? "";
 
-    // chat title for target.name
-    chatTitle = chatTitle ?? d.raw?.chat?.title ?? undefined;
-
     out.push({
       msgId,
       sender: {
@@ -259,9 +253,6 @@ async function fetchWeeklyMessages(
     });
   });
 
-  if (chatTitle !== undefined) {
-    return { messages: out, chatTitle };
-  }
   return { messages: out };
 }
 

@@ -17,7 +17,7 @@ export type ReportTarget = {
 export interface ReportSetting {
   // --- Identity / Labels (optional, for human readability) ---
   /** Display name for this setting (e.g., "JP Sales Weekly") */
-  name?: string;
+  name: string;
   /** Free-form tags to organize settings (e.g., ["sales", "jp-team"]) */
   tags?: string[];
   /** Owner/point of contact (email or user ID) */

@@ -17,7 +17,7 @@ import type { ReportTarget, ReportSetting } from "../../types/reportSetting.js";
 
 export type EnsureReportSettingInput = {
   target: ReportTarget; // required
-  name?: string; // optional label
+  name: string; // required
   enabled?: boolean; // default: true
   owner?: string;
   tags?: string[];
@@ -39,8 +39,9 @@ export type EnsureReportSettingInput = {
 export async function ensureReportSetting(
   input: EnsureReportSettingInput,
 ): Promise<boolean> {
-  const { target } = input;
+  const { target, name } = input;
   assertTarget(target);
+  if (!name || !name.trim()) throw new Error("ReportSetting.name is required");
 
   const id = buildReportSettingId(target, "weekly");
   const ref = db.collection("reports_settings").doc(id);
@@ -56,13 +57,13 @@ export async function ensureReportSetting(
     // Minimal, valid ReportSetting payload (only persist what we have)
     const data: ReportSetting = {
       // Identity / labels (optional)
-      ...(input.name ? { name: input.name } : {}),
       ...(input.tags ? { tags: input.tags } : {}),
       ...(input.owner ? { owner: input.owner } : {}),
 
       // Target (required)
       enabled: input.enabled ?? true,
       target: { type: target.type, id: target.id },
+      name,
 
       // Output destinations (optional)
       output: buildOutput(input.output),

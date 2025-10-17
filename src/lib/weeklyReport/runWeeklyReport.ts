@@ -60,7 +60,10 @@ export async function runWeeklyReport(): Promise<void> {
       // Step 3 + 4. Fetch messages & build AI request payload
       // - buildReportPayload internally loads messages for the recent window
       // -----------------------------------------------------------------------
-      const { body, input } = await buildReportPayload(setting.target.id);
+      const { body } = await buildReportPayload(
+        setting.target.id,
+        setting.name,
+      );
 
       // -----------------------------------------------------------------------
       // Step 5. Generate summary with Vertex AI (Gemini)
@@ -81,8 +84,7 @@ export async function runWeeklyReport(): Promise<void> {
       // Step 7. Deliver to Slack
       // - Prefer input.target.name for a human-readable title
       // -----------------------------------------------------------------------
-      const chatTitle = input.target.name || `chat:${setting.target.id}`;
-      await sendReportToSlack(result, chatTitle);
+      await sendReportToSlack(result, setting.name);
       console.log("✅ Report delivered to Slack.");
 
       // -----------------------------------------------------------------------
