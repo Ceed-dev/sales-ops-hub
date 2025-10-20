@@ -29,6 +29,7 @@ import { ensureReportSetting } from "./lib/weeklyReport/ensureReportSetting.js";
 import {
   handleConfigCommand,
   handleRunCommand,
+  handleHistoryCommand,
 } from "./lib/weeklyReport/commands/index.js";
 
 // -----------------------------------------------------------------------------
@@ -900,6 +901,19 @@ app.post("/api/weekly/config", async (req, res) => {
 // -----------------------------------------------------------------------------
 app.post("/api/weekly/run", async (req, res) => {
   await handleRunCommand(req, res);
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/weekly/history
+// -----------------------------------------------------------------------------
+// Fetch previously generated weekly reports from Firestore.
+// - If `reportId` is provided → returns that single report (detail mode)
+// - Otherwise → returns a list ordered by newest first (list mode)
+// - Optional: re-post the fetched report to Slack
+// -----------------------------------------------------------------------------
+
+app.post("/api/weekly/history", async (req, res) => {
+  await handleHistoryCommand(req, res);
 });
 
 // -----------------------------------------------------------------------------

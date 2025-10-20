@@ -19,6 +19,7 @@
 
 - [handleConfigCommand](#handleconfigcommand)
 - [handleRunCommand](#handleruncommand)
+- [handleHistoryCommand](#handleHistoryCommand)
 - [Template (copy to add new command)](#template-copy-to-add-new-command)
 
 ---
@@ -143,6 +144,90 @@ curl -X POST "$BASE_URL/api/weekly/run"   -H "Content-Type: application/json"   
 
 - Uses `buildReportPayload` → `summarizeWithAI` → (optional) `saveReportToFirestore` → (optional) `sendReportToSlack`.
 - When `dryRun=true`, nothing is persisted; use for safe local reproduction.
+
+---
+
+## handleHistoryCommand
+
+> **Purpose:** Fetch existing weekly reports for a given chat (history lookup / re-send).
+
+**Endpoint**
+
+```
+POST /api/weekly/history
+```
+
+**Request Body (JSON)**
+_(brief schema; keep details in code comments)_
+
+- `chatId` (string, required) — Target chat ID
+- `reportId` (string, optional) — Fetch a single report by ID
+- `limit` (number, optional, default `3`) — Number of reports to return (latest first)
+- `from` (string, optional) — ISO-8601 UTC start timestamp filter
+- `to` (string, optional) — ISO-8601 UTC end timestamp filter
+- `sendToSlack` (boolean, optional, default `false`) — Re-send the result(s) to Slack
+
+**Quick Examples**
+
+_Default (latest 3 reports):_
+
+```bash
+curl -X POST "$BASE_URL/api/weekly/history"   -H "Content-Type: application/json"   -d '{"chatId":"4980589855"}' | jq
+```
+
+_Limit 5 reports:_
+
+```bash
+curl -X POST "$BASE_URL/api/weekly/history"   -H "Content-Type: application/json"   -d '{"chatId":"4980589855","limit":5}' | jq
+```
+
+_Single report by ID:_
+
+```bash
+curl -X POST "$BASE_URL/api/weekly/history"   -H "Content-Type: application/json"   -d '{"chatId":"4980589855","reportId":"REPT_123456"}' | jq
+```
+
+_Filter by date range (UTC):_
+
+```bash
+curl -X POST "$BASE_URL/api/weekly/history"   -H "Content-Type: application/json"   -d '{
+    "chatId": "4980589855",
+    "from": "2025-10-01T00:00:00Z",
+    "to":   "2025-10-20T23:59:59Z"
+  }' | jq
+```
+
+_Re-send latest reports to Slack:_
+
+```bash
+curl -X POST "$BASE_URL/api/weekly/history"   -H "Content-Type: application/json"   -d '{"chatId":"4980589855","limit":3,"sendToSlack":true}' | jq
+```
+
+**Response (summary)**
+
+```jsonc
+{
+  "chatId": "4980589855",
+  "count": 3,
+  "reports": [
+    {
+      "id": "REPT_123456",
+      "createdAt": "2025-10-17T03:00:00Z",
+      "summary": "The Qube and Valley of Guardians teams connected to discuss collaboration...",
+      "finishReason": "STOP",
+    },
+  ],
+  "sendToSlack": false,
+  "latencyMs": 1200,
+}
+```
+
+**Notes**
+
+- When `sendToSlack=true`, uses the existing `sendReportToSlack(result, setting.name)` helper (no duplicate implementation).
+- Defaults to the latest 3 reports sorted by `createdAt desc`.
+- Returns 404 if no report found or invalid `chatId`.
+- Safe to call without authentication (internal tool usage).
 
 ---
 
