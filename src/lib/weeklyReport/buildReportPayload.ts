@@ -263,7 +263,7 @@ async function fetchWeeklyMessages(
  * - Default: end = today 00:00 JST, start = end - 7 days.
  * - If opts.startISO & opts.endISO are provided, use those verbatim.
  */
-function computePeriod(opts: BuildOptions) {
+export function computePeriod(opts: BuildOptions) {
   const tz = opts.tz ?? "Asia/Tokyo";
   if (opts.startISO && opts.endISO)
     return { startISO: opts.startISO, endISO: opts.endISO, tz };

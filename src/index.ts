@@ -26,7 +26,10 @@ import { handleProposalFollowup } from "./lib/telegram/followup.js";
 import { runWeeklyReport } from "./lib/weeklyReport/runWeeklyReport.js";
 import { ensureReportSetting } from "./lib/weeklyReport/ensureReportSetting.js";
 
-import { handleConfigCommand } from "./lib/weeklyReport/commands/index.js";
+import {
+  handleConfigCommand,
+  handleRunCommand,
+} from "./lib/weeklyReport/commands/index.js";
 
 // -----------------------------------------------------------------------------
 // Firestore data types
@@ -879,6 +882,24 @@ app.post("/tasks/weekly-report", async (_req, res) => {
 // -----------------------------------------------------------------------------
 app.post("/api/weekly/config", async (req, res) => {
   await handleConfigCommand(req, res);
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/weekly/run
+// -----------------------------------------------------------------------------
+// Triggers on-demand weekly report generation for a specific chat.
+//
+// Currently exposed as a standard HTTP endpoint (usable via curl, Postman, etc.).
+// In the future, this will also be triggered by Slack bot commands
+// to allow admins to run a report (dry-run or persisted) directly from Slack.
+// Args (JSON body):
+//   - chatId: string (required)
+//   - startISO?: string, endISO?: string, tz?: string
+//   - dryRun?: boolean = true
+//   - notifySlack?: boolean = false
+// -----------------------------------------------------------------------------
+app.post("/api/weekly/run", async (req, res) => {
+  await handleRunCommand(req, res);
 });
 
 // -----------------------------------------------------------------------------
