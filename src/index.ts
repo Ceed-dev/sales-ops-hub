@@ -26,6 +26,8 @@ import { handleProposalFollowup } from "./lib/telegram/followup.js";
 import { runWeeklyReport } from "./lib/weeklyReport/runWeeklyReport.js";
 import { ensureReportSetting } from "./lib/weeklyReport/ensureReportSetting.js";
 
+import { handleConfigCommand } from "./lib/weeklyReport/commands/index.js";
+
 // -----------------------------------------------------------------------------
 // Firestore data types
 // -----------------------------------------------------------------------------
@@ -864,6 +866,19 @@ app.post("/tasks/weekly-report", async (_req, res) => {
     console.error("[/tasks/weekly-report] error:", e);
     return res.status(500).json({ ok: false, error: "weekly_report_failed" });
   }
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/weekly/config
+// -----------------------------------------------------------------------------
+// Handles configuration retrieval or updates for AI Weekly Reports.
+//
+// Currently exposed as a standard HTTP endpoint (usable via curl, Postman, etc.).
+// In the future, this will also be triggered by Slack bot commands
+// to allow admins to view or modify report settings directly from Slack.
+// -----------------------------------------------------------------------------
+app.post("/api/weekly/config", async (req, res) => {
+  await handleConfigCommand(req, res);
 });
 
 // -----------------------------------------------------------------------------
