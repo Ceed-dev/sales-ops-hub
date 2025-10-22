@@ -13,6 +13,7 @@ import { isFromInternal } from "./lib/isInternal.js";
 import { toUtcDayKey, formatJST } from "./utils/time.js";
 import { isDuplicateUpdateId } from "./utils/updateCache.js";
 import { resolveSlackUserIdByTelegramId } from "./utils/resolveSlackUserId.js";
+import { buildNotificationText } from "./utils/buildNotificationText.js";
 
 import { detectMessageType } from "./lib/telegram/messageType.js";
 import { generateSummary } from "./lib/telegram/summary.js";
@@ -21,7 +22,7 @@ import {
   buildChatPartialUpdate,
 } from "./lib/telegram/chatDocs.js";
 import { updateStats } from "./lib/telegram/stats.js";
-import { handleProposalFollowup } from "./lib/telegram/followup.js";
+import { handleFollowupTriggers } from "./lib/telegram/followup.js";
 
 import { runWeeklyReport } from "./lib/weeklyReport/runWeeklyReport.js";
 import { ensureReportSetting } from "./lib/weeklyReport/ensureReportSetting.js";
@@ -76,7 +77,7 @@ app.use(express.json({ limit: "1mb" })); // default ~100kb, here set to 1MB
 //    (MESSAGE_TTL_DAYS).
 // 9) Update chat stats (daily buckets, peaks, per-user counters, etc.).
 // 10) Upsert tg_users/{userId} (global per-user snapshot).
-// 11) Trigger proposal follow-up job if needed.
+// 11) Follow-up triggers: enqueue notification jobs (proposal/invoice/calendly/agreement) if applicable
 // 12) Return 200 (respond quickly to Telegram).
 //
 // Notes:
@@ -544,11 +545,11 @@ app.post("/webhook/telegram", async (req, res) => {
 
     console.log("[TG webhook] tg_users upsert done:", userId);
 
-    // --- 10) Proposal follow-up (enqueue job if needed) ---
+    // --- 10) Follow-up triggers (enqueue jobs if needed) ---
     try {
-      await handleProposalFollowup({ msg, type, sentAt, chatRef, msgRef });
+      await handleFollowupTriggers({ msg, type, sentAt, chatRef, msgRef });
     } catch (e) {
-      console.error("[followup] handleProposalFollowup error:", e);
+      console.error("[followup] handleFollowupTriggers error:", e);
     }
 
     // --- 11) Done ---
@@ -562,21 +563,23 @@ app.post("/webhook/telegram", async (req, res) => {
 // -----------------------------------------------------------------------------
 // POST /tasks/notifications
 // -----------------------------------------------------------------------------
-// Handler for scheduled notification jobs (triggered by Google Cloud Tasks).
+// Handles scheduled notification jobs triggered by Google Cloud Tasks.
 //
 // Flow:
-// 1. Cloud Tasks POSTs { jobId } to this endpoint at the scheduled time.
-// 2. The job is looked up from Firestore (notificationJobs/{jobId}).
-// 3. Retry / deduplication / max-attempt guards are enforced.
-// 4. A Slack notification is attempted (via Incoming Webhook).
-// 5. Result (success / failure) is logged in notificationDeliveries/{deliveryId}.
-// 6. The job document is deleted when completed or permanently failed.
+// 1) Cloud Tasks POSTs `{ jobId }` to this endpoint at the scheduled time.
+// 2) Load `notificationJobs/{jobId}` from Firestore.
+// 3) Enforce guards: retry count (MAX_ATTEMPTS), channel/targets validation, and dedup via `sentOnce`.
+// 4) Build Slack message text via `buildNotificationText(...)` and POST to the incoming webhook.
+// 5) Write a delivery log to `notificationDeliveries/{deliveryId}` (success or failure).
+// 6) On success → mark job `sentOnce=true` and delete the job doc.
+//    On non-retryable failure → log and delete the job doc.
+//    On retryable failure (429/5xx/exception) → return HTTP 500 so Cloud Tasks retries.
 //
 // Notes:
-// - Called only by Cloud Tasks (validated via User-Agent).
-// - Retryable errors (429/5xx/exception) → HTTP 500 → Cloud Tasks retries.
-// - Non-retryable errors (400系) → HTTP 200 + log + job deleted.
-// - Prevents double-send with `sentOnce` guard in job document.
+// - Only accepts calls from Cloud Tasks (validated by User-Agent).
+// - Retryable: HTTP 429 / 5xx / exception → return 500 (job preserved for retry).
+// - Non-retryable: other HTTP errors → return 200 and delete the job doc.
+// - Double-send is prevented by `sentOnce` (set only when Slack POST succeeds).
 // -----------------------------------------------------------------------------
 app.post("/tasks/notifications", async (req, res) => {
   const startHr = process.hrtime.bigint();
@@ -706,12 +709,14 @@ app.post("/tasks/notifications", async (req, res) => {
 
   const mentions = job.targets.slack!.map((t) => `<@${t.userId}>`).join(" ");
 
-  const text = `${mentions}
-It's been 3 days since you sent the proposal document in *"${chatTitle}"*.
-• Document: *${fileName}*
-${caption ? `• Caption: *${caption}*` : ""}
-• Sent at: *${createdAt}*
-Please follow up when you have a moment.`;
+  const text = buildNotificationText(
+    job.type,
+    mentions,
+    chatTitle,
+    fileName,
+    caption,
+    createdAt,
+  );
 
   // --- Ensure Slack webhook URL exists ---
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;
@@ -751,12 +756,6 @@ Please follow up when you have a moment.`;
     respStatus = resp.status;
     respText = await resp.text();
 
-    // Mark job as sent (for re-send guard)
-    await jobRef.update({
-      sentOnce: true,
-      lastSentAt: Timestamp.now(),
-    });
-
     const finishedAt = Timestamp.now();
     const durationMs = Number((process.hrtime.bigint() - startHr) / 1_000_000n);
 
@@ -764,6 +763,14 @@ Please follow up when you have a moment.`;
     const isRetryable =
       respStatus === 429 || (respStatus >= 500 && respStatus <= 599);
     const ok = resp.ok;
+
+    if (ok) {
+      // Mark job as sent (for re-send guard)
+      await jobRef.update({
+        sentOnce: true,
+        lastSentAt: Timestamp.now(),
+      });
+    }
 
     const deliveryRef = await db.collection("notificationDeliveries").add({
       jobId,
