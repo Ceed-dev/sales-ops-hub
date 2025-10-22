@@ -1,45 +1,85 @@
+// -----------------------------------------------------------------------------
+// Returns a Firestore Timestamp scheduled in JST with flexible options.
+// -----------------------------------------------------------------------------
+
 import { Timestamp } from "firebase-admin/firestore";
 
-// -----------------------------------------------------------------------------
-// Returns a Firestore Timestamp representing "15:00 JST on the 3rd day after"
-// the given UTC date.
-// - Input: sentAt (UTC Date)
-// - Output: UTC Timestamp equivalent to target JST time
-// -----------------------------------------------------------------------------
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000; // +09:00
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-const FIFTEEN_HOURS_MS = 15 * 60 * 60 * 1000;
+type ScheduleOpts = {
+  /** Number of days to add (calendar/business). Default: 3 */
+  days?: number;
+  /** Hour in JST. Default: 15 */
+  hour?: number;
+  /** Minute in JST. Default: 0 */
+  minute?: number;
+  /** Count only business days (skip Sat/Sun). Default: true */
+  businessDays?: boolean;
+};
 
-export function jst1500On3rdDay(sentAt: Date): Timestamp {
-  // Convert UTC → JST
-  const jstMillis = sentAt.getTime() + JST_OFFSET_MS;
-  const jstDate = new Date(jstMillis);
+/** Add N days (calendar or business) to a JST calendar date. */
+function addDaysJST(
+  baseUTCDateAt00Z: Date,
+  days: number,
+  businessDays: boolean,
+): Date {
+  if (!businessDays)
+    return new Date(baseUTCDateAt00Z.getTime() + days * ONE_DAY_MS);
 
-  // Get midnight (00:00 JST) of that day
-  const jstMidnight = new Date(
-    Date.UTC(
-      jstDate.getUTCFullYear(),
-      jstDate.getUTCMonth(),
-      jstDate.getUTCDate(),
-      0,
-      0,
-      0,
-      0,
-    ),
+  let d = 0;
+  let cur = new Date(baseUTCDateAt00Z); // represents JST calendar date (Y/M/D) at 00:00Z placeholder
+  while (d < days) {
+    cur = new Date(cur.getTime() + ONE_DAY_MS);
+    const dow = cur.getUTCDay(); // 0=Sun, 6=Sat (calendar-day is timezone-agnostic)
+    if (dow !== 0 && dow !== 6) d++;
+  }
+  return cur;
+}
+
+/**
+ * Schedule time in JST with options.
+ * Keeps current behavior by default: 3 business days later at 15:00 JST.
+ *
+ * @param sentAt  Original event time (Date in UTC)
+ * @param opts    Optional overrides (days/hour/minute/businessDays)
+ * @returns       Firestore Timestamp at the computed UTC instant
+ */
+export function scheduleAtJST(
+  sentAt: Date,
+  opts: ScheduleOpts = {},
+): Timestamp {
+  const days = opts.days ?? 3;
+  const hour = opts.hour ?? 15;
+  const minute = opts.minute ?? 0;
+  const businessDays = opts.businessDays ?? true;
+
+  // Convert to JST calendar components by shifting the clock
+  const jst = new Date(sentAt.getTime() + JST_OFFSET_MS);
+  const y = jst.getUTCFullYear();
+  const m = jst.getUTCMonth();
+  const d = jst.getUTCDate();
+
+  // Base JST "midnight" as a calendar anchor (stored as UTC 00:00Z of that JST date)
+  const baseJSTCalendarAt00Z = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+
+  // Advance days (calendar/business) on JST calendar
+  const targetJSTCalendarAt00Z = addDaysJST(
+    baseJSTCalendarAt00Z,
+    days,
+    businessDays,
   );
 
-  // Add 3 days
-  const targetDayJSTMidnight = new Date(jstMidnight.getTime() + THREE_DAYS_MS);
+  // Build the target JST wall-clock time, then convert back to UTC
+  const ty = targetJSTCalendarAt00Z.getUTCFullYear();
+  const tm = targetJSTCalendarAt00Z.getUTCMonth();
+  const td = targetJSTCalendarAt00Z.getUTCDate();
 
-  // Add 15:00 JST
-  const targetDayJST1500 = new Date(
-    targetDayJSTMidnight.getTime() + FIFTEEN_HOURS_MS,
-  );
+  // This is "hour:minute JST" for that JST date → convert to UTC by subtracting the offset
+  const targetUtcMillis =
+    Date.UTC(ty, tm, td, hour, minute, 0, 0) - JST_OFFSET_MS;
 
-  // Convert back to UTC
-  const utcMillis = targetDayJST1500.getTime() - JST_OFFSET_MS;
-  return Timestamp.fromDate(new Date(utcMillis));
+  return Timestamp.fromMillis(targetUtcMillis);
 }
 
 // -----------------------------------------------------------------------------

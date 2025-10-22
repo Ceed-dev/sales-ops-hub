@@ -11,6 +11,16 @@ import { Timestamp } from "firebase-admin/firestore";
 // Core types
 // -----------------------------------------------------------------------------
 
+// Supported notification types
+export type NotificationType =
+  | "follow_up_proposal_1st"
+  | "follow_up_proposal_2nd"
+  | "follow_up_invoice_1st"
+  | "follow_up_invoice_2nd"
+  | "follow_up_calendly"
+  | "follow_up_agreement_1st"
+  | "follow_up_agreement_2nd";
+
 // Job is always "pending" until executed, then deleted.
 export type JobStatus = "pending";
 
@@ -37,7 +47,7 @@ interface TelegramTarget {
 export interface NotificationJobDoc {
   // --- Identity ---
   jobId: string; // doc id (UUID or deterministic hash)
-  type: "follow_up_proposal"; // enum of notification use-cases (extendable)
+  type: NotificationType; // use-case identifier (enum of follow-up notification types)
   channel: NotificationChannel; // main channel to send
 
   // --- Scheduling ---
@@ -81,7 +91,7 @@ export interface NotificationDeliveryDoc {
   // --- Identity ---
   deliveryId: string; // doc id (auto-generated is fine)
   jobId: string; // reference back to the job (deleted after execution)
-  type: "follow_up_proposal"; // use-case (enum, same as job.type)
+  type: NotificationType; // use-case identifier (enum of follow-up notification types)
   channel: NotificationChannel; // channel used
 
   // --- Target(s) ---
