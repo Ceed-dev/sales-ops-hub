@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // Build the AI request payload for the weekly report.
 // - Public API:
-//    - buildReportPayload(): returns { body, input } for AI call
+//    - buildReportPayload(): returns { body } for AI call
 //    - buildInputContext(): returns normalized input context only
 // - Internals:
 //    - fetchWeeklyMessages(): Firestore query + shape normalization
@@ -81,7 +81,7 @@ export async function buildReportPayload(
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.2,
-      maxOutputTokens: 4000,
+      maxOutputTokens: 8000,
       // JSON Schema for the AI output (unchanged).
       responseSchema: {
         type: "object",
@@ -112,6 +112,10 @@ export async function buildReportPayload(
                 },
                 evidence: {
                   type: "array",
+                  // ▼ [CHANGE] Cap the number of evidence items to prevent overly long outputs.
+                  //    This instructs the model to keep only the first N concrete citations.
+                  //    (Helps avoid MAX_TOKENS when the model tries to enumerate too many evidences.)
+                  maxItems: 2,
                   items: {
                     type: "object",
                     properties: {
@@ -174,6 +178,27 @@ export async function buildInputContext(
 
 // ===== Internals =====
 
+// [ADD] Small sanitizer for noisy system texts.
+// - Deduplicates repeated sentences and trims to a safe max length.
+// - Keeps payload tight to reduce the chance of hitting token limits.
+function sanitizeText(input: string, maxLen = 200): string {
+  const flat = (input || "").replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const parts = flat.split(/(?<=[.!?])\s+/); // sentence-ish split
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const key = p.slice(0, 80); // cheap dedup key
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+    if (out.join(" ").length >= maxLen) break;
+  }
+  let s = out.join(" ");
+  if (s.length > maxLen) s = s.slice(0, maxLen) + "…";
+  return s;
+}
+
 /**
  * Query Firestore for messages within [startISO, endISO) and normalize them.
  */
@@ -226,6 +251,28 @@ async function fetchWeeklyMessages(
         ? "member_join"
         : "text");
 
+    // ▼ [CHANGE] System-message filter (join/leave/invite etc.)
+    //    Rationale: These often contain noisy, auto-generated long texts (e.g., repeated "He can also ..."),
+    //    which bloat the payload and lead to MAX_TOKENS. Skip them proactively.
+    const isJoin = !!(
+      d.new_chat_member ||
+      d.new_chat_members ||
+      d.new_chat_participant
+    );
+    const isLeave = !!d.left_chat_member;
+    const isSystemAction =
+      d.raw?.action === "chat_join" ||
+      d.raw?.action === "chat_add_user" ||
+      d.raw?.action === "chat_remove_user";
+    if (
+      isJoin ||
+      isLeave ||
+      isSystemAction ||
+      type === ("member_join" as any)
+    ) {
+      return; // skip system messages
+    }
+
     // text (optional in some event messages)
     const text: string | undefined = d.text ?? d.raw?.text ?? undefined;
 
@@ -237,7 +284,10 @@ async function fetchWeeklyMessages(
       (safeUsername || (safeSenderId ? `user_${safeSenderId}` : "unknown"));
 
     const safeSentAt = sentAtIso ?? startISO; // fallback to period start if missing
-    const safeText = text ?? "";
+
+    // ▼ [CHANGE] Trim & de-duplicate overly long / repetitive texts before passing to AI.
+    //    Rationale: Keep each message compact (<= ~500 chars) and remove repeated sentences.
+    const safeText = sanitizeText(text ?? "");
 
     out.push({
       msgId,
