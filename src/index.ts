@@ -23,6 +23,7 @@ import {
 } from "./lib/telegram/chatDocs.js";
 import { updateStats } from "./lib/telegram/stats.js";
 import { handleFollowupTriggers } from "./lib/telegram/followup.js";
+import { leaveChat } from "./lib/telegram/leaveChat.js";
 
 import { runWeeklyReport } from "./lib/weeklyReport/runWeeklyReport.js";
 import { ensureReportSetting } from "./lib/weeklyReport/ensureReportSetting.js";
@@ -148,8 +149,8 @@ app.post("/webhook/telegram", async (req, res) => {
             (msg.from?.username
               ? "@" + msg.from.username
               : [msg.from?.first_name, msg.from?.last_name]
-                .filter(Boolean)
-                .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
+                  .filter(Boolean)
+                  .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
 
           // --- Slack notification (best-effort, non-blocking) ---
           try {
@@ -191,22 +192,7 @@ app.post("/webhook/telegram", async (req, res) => {
           }
 
           // --- Leave the unauthorized chat (best-effort) ---
-          try {
-            const api = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/leaveChat`;
-            const resp = await fetch(api, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: chatIdStr }),
-            });
-            if (!resp.ok) {
-              const body = await resp.text();
-              console.warn(
-                `[telegram] leaveChat failed: ${resp.status} ${body?.slice(0, 300) || ""}`,
-              );
-            }
-          } catch (e) {
-            console.warn("[telegram] leaveChat error:", e);
-          }
+          await leaveChat(chatIdStr);
 
           // Stop the webhook here: do not create/update any DB docs for this chat.
           return res.sendStatus(200);
@@ -221,8 +207,8 @@ app.post("/webhook/telegram", async (req, res) => {
             (msg.from?.username
               ? "@" + msg.from.username
               : [msg.from?.first_name, msg.from?.last_name]
-                .filter(Boolean)
-                .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
+                  .filter(Boolean)
+                  .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
 
           // Try to resolve Slack userId from Telegram userId.
           const slackUserId = await resolveSlackUserIdByTelegramId(
@@ -269,22 +255,7 @@ app.post("/webhook/telegram", async (req, res) => {
           }
 
           // --- Leave the private chat (best-effort) ---
-          try {
-            const api = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/leaveChat`;
-            const resp = await fetch(api, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: chatIdStr }),
-            });
-            if (!resp.ok) {
-              const body = await resp.text();
-              console.warn(
-                `[telegram] leaveChat failed: ${resp.status} ${body?.slice(0, 300) || ""}`,
-              );
-            }
-          } catch (e) {
-            console.warn("[telegram] leaveChat error:", e);
-          }
+          await leaveChat(chatIdStr);
 
           // Stop here: do not create/update any DB docs for this chat.
           return res.sendStatus(200);
@@ -362,8 +333,8 @@ app.post("/webhook/telegram", async (req, res) => {
             (msg.from?.username
               ? "@" + msg.from.username
               : [msg.from?.first_name, msg.from?.last_name]
-                .filter(Boolean)
-                .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
+                  .filter(Boolean)
+                  .join(" ") || "Unknown user") + ` (ID: ${msg.from?.id})`;
           const slackUserId = await resolveSlackUserIdByTelegramId(
             String(msg.from?.id ?? ""),
           );
@@ -703,8 +674,8 @@ app.post("/tasks/notifications", async (req, res) => {
 
   const createdAt = job.createdAt?.toDate
     ? job.createdAt
-      .toDate()
-      .toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST"
+        .toDate()
+        .toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) + " JST"
     : "(no timestamp)";
 
   const mentions = job.targets.slack!.map((t) => `<@${t.userId}>`).join(" ");
