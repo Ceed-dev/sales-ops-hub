@@ -43,33 +43,33 @@ If there has been no response, please send a gentle reminder.`;
     // --- Invoice follow-ups ---------------------------------------------------
     case "follow_up_invoice_1st":
       return `${mentions}
-It's been 3 days since you sent the invoice in *"${chatTitle}"*.
+It's been 2 days since you sent the invoice in *"${chatTitle}"*.
 ${baseInfo}
 Please check if the client has received it.`;
 
     case "follow_up_invoice_2nd":
       return `${mentions}
-It's been 6 days since you sent the invoice in *"${chatTitle}"*.
+It's been 4 days since you sent the invoice in *"${chatTitle}"*.
 ${baseInfo}
 If the payment is still pending, please follow up with the client.`;
 
     // --- Calendly follow-up ---------------------------------------------------
     case "follow_up_calendly":
       return `${mentions}
-It's been a few days since you sent the Calendly link in *"${chatTitle}"*.
+It's been one day since you sent the Calendly link in *"${chatTitle}"*.
 ${baseInfo}
 Please check if a meeting has been scheduled.`;
 
     // --- Agreement follow-ups -------------------------------------------------
     case "follow_up_agreement_1st":
       return `${mentions}
-It's been 3 days since you sent the agreement in *"${chatTitle}"*.
+It's been 2 days since you sent the agreement in *"${chatTitle}"*.
 ${baseInfo}
 Please confirm whether the client has reviewed it.`;
 
     case "follow_up_agreement_2nd":
       return `${mentions}
-It's been 6 days since you sent the agreement in *"${chatTitle}"*.
+It's been 4 days since you sent the agreement in *"${chatTitle}"*.
 ${baseInfo}
 If there has been no update, please reach out again.`;
 
