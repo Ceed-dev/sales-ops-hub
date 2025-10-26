@@ -49,8 +49,9 @@ export async function sendReportToSlack(
   chatTitle: string,
 ): Promise<void> {
   try {
-    const webhookUrl = process.env.SLACK_WEBHOOK_URL;
-    if (!webhookUrl) throw new Error("SLACK_WEBHOOK_URL is not set");
+    const webhookUrlSecond = process.env.SLACK_WEBHOOK_URL_SECOND;
+    if (!webhookUrlSecond)
+      throw new Error("SLACK_WEBHOOK_URL_SECOND is not set");
 
     // --- Build message text ---
     const lines: string[] = [];
@@ -95,7 +96,7 @@ export async function sendReportToSlack(
     const text = lines.join("\n");
 
     // --- Send to Slack ---
-    const resp = await fetch(webhookUrl, {
+    const resp = await fetch(webhookUrlSecond, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, mrkdwn: true, link_names: 1 }),
