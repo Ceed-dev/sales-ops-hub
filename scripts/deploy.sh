@@ -5,76 +5,136 @@ set -euo pipefail
 # Cloud Run deploy helper
 #
 # Usage:
-#   1) Deploy code only (reuse existing secrets/config):
+#   1) Deploy code only (reuse existing secrets/config already bound on the
+#      latest healthy revision). This script will *re-bind all required secrets*
+#      explicitly on every deploy:
 #        ./scripts/deploy.sh
 #
-#   2) Create/Update a Secret in Secret Manager, bind it, then deploy:
-#        SECRET_KEY=SLACK_WEBHOOK_URL \
+#   2) Create/Update a Secret in Secret Manager, grant access to the Cloud Run
+#      runtime service account, then deploy (the new secret will also be bound):
+#        SECRET_KEY=SLACK_WEBHOOK_URL_SECOND \
 #        SECRET_VALUE="https://hooks.slack.com/services/xxx/yyy/zzz" \
 #        ./scripts/deploy.sh
 #
-#   3) Use a specific service account (optional; defaults to project's compute SA):
-#        SERVICE_ACCOUNT="my-run-sa@sales-ops-hub.iam.gserviceaccount.com" ./scripts/deploy.sh
+#   3) Use a specific service account (optional; defaults to project's
+#      Compute Engine default service account for secret access binding):
+#        SERVICE_ACCOUNT="cloud-run-sa@sales-ops-hub.iam.gserviceaccount.com" \
+#        ./scripts/deploy.sh
 #
 # Prerequisites (first time only):
 #   gcloud auth login
 #   gcloud auth application-default login
+#   gcloud config set project <PROJECT_ID>   # (this script also does it)
 # ==============================================================================
 
-# --- Fixed values (do not change unless your env changes) ---
+# ----------------------------
+# Project / service parameters
+# ----------------------------
 PROJECT_ID="sales-ops-hub"
 REGION="asia-northeast1"
 SERVICE_NAME="sales-ops-bot"
 
-# --- Optional inputs (override via env when needed) ---
-SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-}"  # If empty, will be auto-detected
-SECRET_KEY="${SECRET_KEY:-}"            # e.g. SLACK_WEBHOOK_URL
+# -----------------------------------
+# Required secrets to bind each deploy
+# (add a new key here when you add one)
+# -----------------------------------
+REQUIRED_SECRETS=(
+  FIREBASE_PROJECT_ID
+  GCP_PROJECT_ID
+  GCP_LOCATION_ID
+  GCP_TASKS_QUEUE
+  SLACK_WEBHOOK_URL
+  SLACK_WEBHOOK_URL_SECOND
+  TELEGRAM_BOT_TOKEN
+  TELEGRAM_WEBHOOK_SECRET
+  MESSAGE_TTL_DAYS
+  PUBLIC_BASE_URL
+  VERTEX_API_KEY
+)
+
+# ---------------------------------------
+# Optional inputs via environment variables
+# ---------------------------------------
+SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-}"  # For granting Secret Manager access
+SECRET_KEY="${SECRET_KEY:-}"            # e.g. SLACK_WEBHOOK_URL_SECOND
 SECRET_VALUE="${SECRET_VALUE:-}"        # e.g. https://hooks.slack.com/...
 
-echo ">> Project: $PROJECT_ID / Service: $SERVICE_NAME / Region: $REGION"
-gcloud config set project "$PROJECT_ID" >/dev/null
+# ---------------
+# Helper functions
+# ---------------
+log()   { printf "\033[1;34m>> %s\033[0m\n" "$*"; }
+warn()  { printf "\033[1;33m[warn] %s\033[0m\n" "$*"; }
+error() { printf "\033[1;31m[error] %s\033[0m\n" "$*"; exit 1; }
 
-# --- Secret upsert & IAM binding (only when SECRET_* is provided) ---
-USE_SECRETS_FLAG=()
-if [[ -n "$SECRET_KEY" && -n "$SECRET_VALUE" ]]; then
-  echo ">> Upserting Secret: $SECRET_KEY"
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || error "Required command not found: $1"
+}
 
-  # Create the secret if it does not exist
-  if ! gcloud secrets describe "$SECRET_KEY" >/dev/null 2>&1; then
-    gcloud secrets create "$SECRET_KEY" --replication-policy=automatic
+# --------------------
+# Basic sanity checks
+# --------------------
+require_cmd gcloud
+log "Project: ${PROJECT_ID} / Service: ${SERVICE_NAME} / Region: ${REGION}"
+gcloud config set project "${PROJECT_ID}" >/dev/null
+
+# ----------------------------------------------------------
+# (Optional) Upsert a secret and grant read access to the SA
+# ----------------------------------------------------------
+if [[ -n "${SECRET_KEY}" && -n "${SECRET_VALUE}" ]]; then
+  log "Upserting Secret Manager secret: ${SECRET_KEY}"
+
+  # Create secret if it does not exist
+  if ! gcloud secrets describe "${SECRET_KEY}" >/dev/null 2>&1; then
+    gcloud secrets create "${SECRET_KEY}" --replication-policy=automatic
   fi
 
   # Add a new version from STDIN
-  printf "%s" "$SECRET_VALUE" | gcloud secrets versions add "$SECRET_KEY" --data-file=-
+  printf "%s" "${SECRET_VALUE}" | gcloud secrets versions add "${SECRET_KEY}" --data-file=-
 
-  # Grant secret access to the Cloud Run runtime service account
-  if [[ -z "$SERVICE_ACCOUNT" ]]; then
-    PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+  # Determine which service account to grant (if not provided)
+  if [[ -z "${SERVICE_ACCOUNT}" ]]; then
+    PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
     SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+    warn "SERVICE_ACCOUNT not specified. Using default: ${SERVICE_ACCOUNT}"
   fi
 
-  gcloud secrets add-iam-policy-binding "$SECRET_KEY" \
+  # Grant Secret Manager access
+  gcloud secrets add-iam-policy-binding "${SECRET_KEY}" \
     --member="serviceAccount:${SERVICE_ACCOUNT}" \
     --role="roles/secretmanager.secretAccessor" >/dev/null
 
-  # Inject the latest secret version into the new revision
-  USE_SECRETS_FLAG=(--set-secrets "${SECRET_KEY}=${SECRET_KEY}:latest")
+  # Ensure the newly upserted key is in the binding list
+  if [[ ! " ${REQUIRED_SECRETS[*]} " =~ " ${SECRET_KEY} " ]]; then
+    REQUIRED_SECRETS+=("${SECRET_KEY}")
+  fi
 fi
 
-# --- Deploy to Cloud Run (Buildpacks; no Dockerfile required) ---
-echo ">> Deploying to Cloud Run..."
+# ---------------------------------------------------
+# (Optional) Warn if any required secret is missing
+# ---------------------------------------------------
+for key in "${REQUIRED_SECRETS[@]}"; do
+  if ! gcloud secrets describe "${key}" >/dev/null 2>&1; then
+    warn "Required secret '${key}' not found in Secret Manager. Deploy will fail if the app expects it."
+  fi
+done
 
-if ((${#USE_SECRETS_FLAG[@]})); then
-  gcloud run deploy "$SERVICE_NAME" \
-    --source . \
-    --region "$REGION" \
-    --allow-unauthenticated \
-    "${USE_SECRETS_FLAG[@]}"
-else
-  gcloud run deploy "$SERVICE_NAME" \
-    --source . \
-    --region "$REGION" \
-    --allow-unauthenticated
-fi
+# ---------------------------------------------
+# Build --set-secrets flags for ALL required keys
+# ---------------------------------------------
+SET_SECRETS_FLAGS=()
+for key in "${REQUIRED_SECRETS[@]}"; do
+  SET_SECRETS_FLAGS+=( --set-secrets "${key}=${key}:latest" )
+done
 
-echo ">> Done. ✅"
+# -----------------------
+# Deploy to Cloud Run
+# (Buildpacks; no Dockerfile required)
+# -----------------------
+log "Deploying to Cloud Run..."
+gcloud run deploy "${SERVICE_NAME}" \
+  --source . \
+  --region "${REGION}" \
+  --allow-unauthenticated \
+  "${SET_SECRETS_FLAGS[@]}"
+
+log "Done. ✅"
