@@ -71,9 +71,10 @@ export async function buildReportPayload(
   chatTitle: string,
   opts: BuildOptions = {},
   systemText?: string,
-): Promise<{ body: VertexRequestBody }> {
+): Promise<{ body: VertexRequestBody; isNoMessages: boolean }> {
   const sysText = systemText ?? (await loadReportAiSectionPrompt());
   const input = await buildInputContext(chatId, chatTitle, opts);
+  const isNoMessages = !input.messages || input.messages.length === 0;
 
   const body: VertexRequestBody = {
     systemInstruction: { parts: [{ text: sysText }] },
@@ -155,7 +156,7 @@ export async function buildReportPayload(
     },
   };
 
-  return { body };
+  return { body, isNoMessages };
 }
 
 /**

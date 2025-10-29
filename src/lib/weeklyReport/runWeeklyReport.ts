@@ -60,7 +60,7 @@ export async function runWeeklyReport(): Promise<void> {
       // Step 3 + 4. Fetch messages & build AI request payload
       // - buildReportPayload internally loads messages for the recent window
       // -----------------------------------------------------------------------
-      const { body } = await buildReportPayload(
+      const { body, isNoMessages } = await buildReportPayload(
         setting.target.id,
         setting.name,
       );
@@ -81,11 +81,15 @@ export async function runWeeklyReport(): Promise<void> {
       console.log("✅ Report saved to Firestore.");
 
       // -----------------------------------------------------------------------
-      // Step 7. Deliver to Slack
+      // Step 7. Deliver to Slack (only when there were messages)
       // - Prefer input.target.name for a human-readable title
       // -----------------------------------------------------------------------
-      await sendReportToSlack(result, setting.name);
-      console.log("✅ Report delivered to Slack.");
+      if (!isNoMessages) {
+        await sendReportToSlack(result, setting.name);
+        console.log("✅ Report delivered to Slack.");
+      } else {
+        console.log("⚪ No messages in period — Slack notification skipped.");
+      }
 
       // -----------------------------------------------------------------------
       // Step 8. Update setting execution status (success)
