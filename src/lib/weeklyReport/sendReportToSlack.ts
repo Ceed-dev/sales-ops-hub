@@ -61,9 +61,9 @@ export async function sendReportToSlack(
     lines.push(`Chat: *${chatTitle}*`);
     lines.push("━━━━━━━━━━━━━━━");
     lines.push("");
-    lines.push(`*Summary:*`);
-    lines.push((result.summary || "").trim() || "No updates this week.");
-    lines.push("");
+    // lines.push(`*Summary:*`);
+    // lines.push((result.summary || "").trim() || "No updates this week.");
+    // lines.push("");
 
     const hasBullets =
       Array.isArray(result.bullets) && result.bullets.length > 0;
