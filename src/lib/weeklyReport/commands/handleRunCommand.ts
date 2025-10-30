@@ -120,7 +120,7 @@ export async function handleRunCommand(req: Request, res: Response) {
     // -------------------------------------------------------------------------
     // 3) Build AI payload (internally fetches messages in [startISO, endISO))
     // -------------------------------------------------------------------------
-    const { body } = await buildReportPayload(chatId, chatTitle, {
+    const { body, isNoMessages } = await buildReportPayload(chatId, chatTitle, {
       startISO: period.startISO,
       endISO: period.endISO,
       tz: period.tz,
@@ -147,9 +147,11 @@ export async function handleRunCommand(req: Request, res: Response) {
     // -------------------------------------------------------------------------
     // 6) Slack notification (optional; title carries [DRY RUN] if applicable)
     // -------------------------------------------------------------------------
-    if (notifySlack) {
+    if (notifySlack && !isNoMessages) {
       const titleForSlack = dryRun ? `[DRY RUN] ${chatTitle}` : chatTitle;
       await sendReportToSlack(result, titleForSlack);
+    } else if (notifySlack && isNoMessages) {
+      console.log("⚪ No messages in period — Slack notification skipped.");
     }
 
     // -------------------------------------------------------------------------
@@ -161,6 +163,7 @@ export async function handleRunCommand(req: Request, res: Response) {
         : "Run completed (persisted).",
       dryRun,
       notifySlack,
+      noActivity: isNoMessages,
       period,
       latencyMs,
       resultPreview: {
