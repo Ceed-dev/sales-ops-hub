@@ -25,6 +25,46 @@
 // -----------------------------------------------------------------------------
 
 /**
+ * Collapse obvious repetitions, normalize whitespace, and hard-cap length.
+ * - Repetition: removes immediate repeats of 10+ char sequences (…aaaa aaaa…)
+ * - Whitespace: collapses runs of spaces/newlines
+ * - Length: trims to maxLen chars and appends ellipsis
+ */
+function sanitizeEvidenceExcerpt(input: unknown, maxLen = 120): string {
+  if (typeof input !== "string") return "";
+  let s = input;
+  s = s.replace(/(.{10,}?)\1+/g, "$1"); // naive repetition
+  s = s.replace(/\s+/g, " ").trim(); // whitespace normalize
+  if (s.length > maxLen) s = s.slice(0, maxLen) + "…";
+  return s;
+}
+
+/** Generic clamp for interim raw text */
+function dedupeAndClamp(s: string, max = 2000): string {
+  return (s || "")
+    .replace(/(.{10,}?)\1+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+/**
+ * Walks the parsed JSON and sanitizes `evidence[].textExcerpt` in-place.
+ * Safe against unexpected shapes.
+ */
+function sanitizeModelBullets(parsed: any): any {
+  if (!parsed || !Array.isArray(parsed.bullets)) return parsed;
+  for (const b of parsed.bullets) {
+    if (!b || !Array.isArray(b.evidence)) continue;
+    for (const ev of b.evidence) {
+      if (!ev) continue;
+      ev.textExcerpt = sanitizeEvidenceExcerpt(ev.textExcerpt, 120);
+    }
+  }
+  return parsed;
+}
+
+/**
  * Calls Vertex AI (Gemini) to generate a structured summary.
  *
  * @param body - The request body prepared by buildReportPayload().
@@ -54,7 +94,7 @@ export async function summarizeWithAI(body: Record<string, any>): Promise<{
       if (m) {
         try {
           return JSON.parse(m[0]);
-        } catch {}
+        } catch { }
       }
       return null;
     }
@@ -76,13 +116,34 @@ export async function summarizeWithAI(body: Record<string, any>): Promise<{
   // ---------------------------------------------------------------------------
   // 2. First request
   // ---------------------------------------------------------------------------
+
+  // --- Observability: request summary (no payload dump) ---
+  const approxTokens = (s: string) => Math.ceil((s ?? "").length / 4);
+  const schemaCaps = {
+    summaryMax: (body.responseSchema as any)?.properties?.summary?.maxLength,
+    bulletsMax: (body.responseSchema as any)?.properties?.bullets?.maxItems,
+    evidenceMax: (body.responseSchema as any)?.properties?.bullets?.items
+      ?.properties?.evidence?.maxItems,
+    textExcerptMax: (body.responseSchema as any)?.properties?.bullets?.items
+      ?.properties?.evidence?.items?.properties?.textExcerpt?.maxLength,
+  };
+  const contentsStr = JSON.stringify(body.contents ?? []);
+  console.log("[AI:req:init]", {
+    genCfg: body.generationConfig,
+    schemaCaps,
+    inputChars: contentsStr.length,
+    inputTokEst: approxTokens(contentsStr),
+  });
+
   let json: any = await callVertexAI(body);
   let finishReason: string = json?.candidates?.[0]?.finishReason ?? "UNKNOWN";
   let usage: Record<string, any> = json?.usageMetadata ?? {};
   let rawText: string = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
-  console.log("[VertexAI] finishReason:", finishReason);
-  console.log("[VertexAI] usage:", usage);
+  console.log("[AI:res:init]", {
+    finishReason,
+    usage, // includes prompt/candidates/total
+  });
 
   // ---------------------------------------------------------------------------
   // 3. Retry loop for MAX_TOKENS / LENGTH
@@ -102,9 +163,16 @@ export async function summarizeWithAI(body: Record<string, any>): Promise<{
       `[VertexAI] Output truncated. Retrying continuation... (Attempt ${attempts})`,
     );
 
+    let safeLatestText: string | undefined;
+    if (latestParsed) {
+      const clone = JSON.parse(JSON.stringify(latestParsed));
+      sanitizeModelBullets(clone);
+      safeLatestText = JSON.stringify(clone).slice(0, 2000);
+    }
+
     // Build continuation prompt
-    const contBody = {
-      ...body,
+    const contBody: Record<string, any> = {
+      ...(body as any),
       contents: [
         ...(body.contents || []),
         // Send the latest JSON or the previous text abbreviated
@@ -112,9 +180,8 @@ export async function summarizeWithAI(body: Record<string, any>): Promise<{
           role: "model",
           parts: [
             {
-              text: latestParsed
-                ? JSON.stringify(latestParsed).slice(0, 2000)
-                : rawText.slice(-2000),
+              text:
+                safeLatestText ?? dedupeAndClamp(rawText.slice(-2000), 2000),
             },
           ],
         },
@@ -122,29 +189,48 @@ export async function summarizeWithAI(body: Record<string, any>): Promise<{
           role: "user",
           parts: [
             {
-              text: "Please continue and complete the JSON output fully. Return only valid JSON, no repetition.",
+              text:
+                "Please continue the JSON output briefly — only add the remaining fields if any. " +
+                "If the structure already seems complete, return the same JSON as-is. " +
+                "Keep total output short (under 1,500 characters).",
             },
           ],
         },
       ],
     };
 
+    console.log(`[AI:cont:${attempts}] send`, {
+      useSafeLatest: Boolean(safeLatestText),
+      safeLatestChars: safeLatestText?.length ?? 0,
+      rawTailChars: rawText.slice(-2000).length,
+      genCfg: contBody.generationConfig,
+    });
+
     try {
       const contJson: any = await callVertexAI(contBody);
+
       const contText =
         contJson?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       const contFinishReason =
         contJson?.candidates?.[0]?.finishReason ?? finishReason;
 
+      console.log(`[AI:cont:${attempts}] recv`, {
+        finishReason: contFinishReason,
+        usage: contJson?.usageMetadata,
+        contTextChars: (
+          contJson?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
+        ).length,
+      });
+
       // Do not concatenate rawText sequentially
       // Instead, check if continuation contains complete JSON
       const parsed = tryParse(contText);
       if (parsed) {
-        latestParsed = parsed; // replace with newest complete JSON
-        rawText = contText; // replace instead of +=
+        sanitizeModelBullets(parsed);
+        latestParsed = parsed;
+        rawText = JSON.stringify(parsed).slice(0, 2000);
       } else {
-        // fallback: append only short snippet for inspection
-        rawText += "\n" + contText.slice(0, 500);
+        rawText = dedupeAndClamp(rawText + "\n" + contText, 1200);
       }
 
       finishReason = contFinishReason;
@@ -173,10 +259,12 @@ export async function summarizeWithAI(body: Record<string, any>): Promise<{
 
   const finalParsed = latestParsed || tryParse(rawText);
   if (finalParsed) {
+    sanitizeModelBullets(finalParsed);
     summary = finalParsed.summary ?? "";
     bullets = Array.isArray(finalParsed.bullets) ? finalParsed.bullets : [];
   } else {
-    summary = rawText;
+    const clipped = dedupeAndClamp(rawText || "", 400);
+    summary = clipped + ((rawText?.length ?? 0) > 400 ? "…" : "");
   }
 
   switch (finishReason) {
@@ -205,6 +293,13 @@ export async function summarizeWithAI(body: Record<string, any>): Promise<{
   // ---------------------------------------------------------------------------
   // 5. Return safe structured output
   // ---------------------------------------------------------------------------
+
+  console.log("[AI:final]", {
+    finishReason,
+    summaryLen: (summary ?? "").length,
+    bulletsCount: Array.isArray(bullets) ? bullets.length : 0,
+  });
+
   return {
     summary: summary.trim(),
     bullets,

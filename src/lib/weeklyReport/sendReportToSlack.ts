@@ -45,6 +45,7 @@ export async function sendReportToSlack(
         reason?: string;
       }[];
     }[];
+    finishReason: string;
   },
   chatTitle: string,
 ): Promise<void> {
@@ -64,6 +65,19 @@ export async function sendReportToSlack(
     // lines.push(`*Summary:*`);
     // lines.push((result.summary || "").trim() || "No updates this week.");
     // lines.push("");
+
+    const r = result.finishReason ?? "UNKNOWN";
+    if (r !== "STOP") {
+      const mention = "<@U02A6MHJSMP>"; // Mention "Pochi"
+      const status =
+        r === "MAX_TOKENS" || r === "LENGTH"
+          ? "⚠️ Output was truncated (auto-recovered)"
+          : r === "CONTENT_FILTERED"
+            ? "🚫 Blocked by safety filter"
+            : `❓ ${r}`;
+      lines.push(`${mention} *Status:* ${status}`);
+      lines.push("");
+    }
 
     const hasBullets =
       Array.isArray(result.bullets) && result.bullets.length > 0;

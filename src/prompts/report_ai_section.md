@@ -109,6 +109,7 @@ The output must clearly reflect real message content and context — no speculat
        "reason": "deadline_source | requirement_source | decision_source | schedule_confirmation | misc (optional)"
      }
      ```
+     For evidence[].textExcerpt, output a single line, ≤120 characters, with no repeated phrases and normalized whitespace. If longer, truncate and append an ellipsis (…). Do not modify other fields.
      - `msgId` is **required** and must be the original platform message identifier.
      - `sender` may include `id`, `displayName`, and `username` if available in the input.
      - `sentAt`, if present, must be a valid ISODateTime (e.g., `"2025-10-03T11:00:00+09:00"`).

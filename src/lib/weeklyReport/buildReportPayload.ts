@@ -82,20 +82,22 @@ export async function buildReportPayload(
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.2,
-      maxOutputTokens: 8000,
+      maxOutputTokens: 65535,
       // JSON Schema for the AI output (unchanged).
       responseSchema: {
         type: "object",
         properties: {
-          summary: { type: "string" },
+          summary: { type: "string", maxLength: 400 },
           bullets: {
             type: "array",
+            maxItems: 5,
             items: {
               type: "object",
               properties: {
                 point: { type: "string" },
                 timeline: {
                   type: "array",
+                  maxItems: 3,
                   items: {
                     type: "object",
                     properties: {
@@ -131,7 +133,11 @@ export async function buildReportPayload(
                         required: ["id"],
                       },
                       sentAt: { type: "string" },
-                      textExcerpt: { type: "string" },
+                      textExcerpt: {
+                        type: "string",
+                        maxLength: 120,
+                        pattern: "^[^\\n\\r]*$",
+                      },
                       reason: {
                         type: "string",
                         enum: [
