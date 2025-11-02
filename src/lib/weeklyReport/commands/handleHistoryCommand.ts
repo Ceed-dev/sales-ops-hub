@@ -88,9 +88,13 @@ function toLeanReport(
   };
 }
 
-/** Normalize stored report to { summary, bullets } for Slack re-post. */
-function toSlackResult(d: any): { summary: string; bullets: any[] } {
-  // Some schemas stored JSON-stringified {summary, bullets} in `summary`.
+/** Normalize stored report to { summary, bullets, finishReason } for Slack re-post. */
+function toSlackResult(d: any): {
+  summary: string;
+  bullets: any[];
+  finishReason: string;
+} {
+  // Case 1: `summary` contains JSON string of { summary, bullets, finishReason? }
   if (typeof d.summary === "string" && d.summary.trim().startsWith("{")) {
     try {
       const parsed = JSON.parse(d.summary);
@@ -98,15 +102,24 @@ function toSlackResult(d: any): { summary: string; bullets: any[] } {
         return {
           summary: String(parsed.summary ?? ""),
           bullets: Array.isArray(parsed.bullets) ? parsed.bullets : [],
+          finishReason:
+            typeof parsed.finishReason === "string"
+              ? parsed.finishReason
+              : typeof d.finishReason === "string"
+                ? d.finishReason
+                : "STOP",
         };
       }
     } catch {
       // fall through to plain string mode
     }
   }
+
+  // Case 2: Normal fields stored separately
   return {
     summary: typeof d.summary === "string" ? d.summary : "",
     bullets: Array.isArray(d.bullets) ? d.bullets : [],
+    finishReason: typeof d.finishReason === "string" ? d.finishReason : "STOP",
   };
 }
 
