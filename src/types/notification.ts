@@ -13,6 +13,7 @@ import { Timestamp } from "firebase-admin/firestore";
 
 // Supported notification types
 export type NotificationType =
+  | "follow_up_bot_join_call_check"
   | "follow_up_proposal_1st"
   | "follow_up_proposal_2nd"
   | "follow_up_invoice_1st"

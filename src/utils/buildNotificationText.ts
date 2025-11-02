@@ -27,6 +27,12 @@ export const buildNotificationText = (
   // Message text by notification type
   // ---------------------------------------------------------------------------
   switch (type) {
+    // --- Follow-up three hours after the bot was added to the chat ------------
+    case "follow_up_bot_join_call_check":
+      return `${mentions}
+Reminder: A new bot was added to *"${chatTitle}"* on *${createdAt}*.
+Please check whether the call link has been sent to the group.`;
+
     // --- Proposal follow-ups --------------------------------------------------
     case "follow_up_proposal_1st":
       return `${mentions}

@@ -19,6 +19,7 @@ import type {
  * Build one or more follow-up schedules for a detected notification type.
  * - Always returns concrete (type, scheduledAt) pairs.
  * - Defaults: business days, 15:00 JST (via scheduleAtJST).
+ * - bot_join_call_check → +3h (JST); if falls between 03:00–11:00 JST (inclusive), snap to 11:00 JST.
  */
 function getFollowupSchedules(
   notifType: NotificationType,
@@ -28,6 +29,33 @@ function getFollowupSchedules(
     type,
     scheduledAt: scheduleAtJST(sentAt, { days }), // 15:00 JST, businessDays: true
   });
+
+  // --- Special scheduling for bot-join call check (no business day logic) ---
+  if (notifType === "follow_up_bot_join_call_check") {
+    // +3 hours from the join time (UTC basis)
+    const plus3 = new Date(sentAt.getTime() + 3 * 3600_000);
+
+    // Convert to JST components by shifting +9h from UTC
+    const jst = new Date(plus3.getTime() + 9 * 3600_000);
+    const y = jst.getUTCFullYear();
+    const m = jst.getUTCMonth();
+    const d = jst.getUTCDate();
+    const h = jst.getUTCHours(); // JST hour
+
+    // If 03:00–11:00 JST (inclusive), snap to 11:00 JST same day
+    const scheduledJst =
+      h >= 3 && h <= 11 ? new Date(Date.UTC(y, m, d, 2)) /* 11:00 JST */ : jst;
+
+    // Convert back to UTC Date for Firestore Timestamp (subtract 9h)
+    const scheduledUtc = new Date(scheduledJst.getTime() - 9 * 3600_000);
+
+    return [
+      {
+        type: "follow_up_bot_join_call_check",
+        scheduledAt: Timestamp.fromDate(scheduledUtc),
+      },
+    ];
+  }
 
   switch (notifType) {
     // Proposal: 1st (+3d), 2nd (+6d)
@@ -62,23 +90,29 @@ function getFollowupSchedules(
 
 /** Decide a single follow-up type for this message.
  *  Returns null if none matches.
- *  Priority: proposal → invoice → calendly → agreement
+ *  Priority: bot_join_call_check → proposal → invoice → calendly → agreement
  */
 function getFollowupType(msg: any, type: MessageType): NotificationType | null {
   // Guard: only messages from internal members are eligible
   if (!isFromInternal(msg?.from?.id)) return null;
 
-  // Normalize text sources for keyword checks
+  // --- Helpers ---------------------------------------------------------------
   const caption = String(msg?.caption ?? "");
   const text = String(msg?.text ?? "");
   const fileName = String(msg?.document?.file_name ?? "");
   const combined = `${caption}\n${text}\n${fileName}`.toLowerCase();
 
-  // Small helpers
   const has = (kw: string) => combined.includes(kw);
   const hasAny = (kws: string[]) => kws.some((k) => combined.includes(k));
 
-  // Matchers (keep priority semantics in the return section)
+  // Detect "bot was added to the group" event (member_join includes the bot itself)
+  const BOT_USERNAME = "sales_ops_assistant_bot";
+  const isBotJoinCallCheck =
+    type === "member_join" &&
+    Array.isArray(msg?.new_chat_members) &&
+    msg.new_chat_members.some((u: any) => u.username === BOT_USERNAME);
+
+  // Link-based matchers
   const isProposalDoc =
     hasAny(["docs.google.com", "drive.google.com"]) && has("proposal");
   const isInvoiceDoc = type === "document" && has("invoice");
@@ -86,7 +120,11 @@ function getFollowupType(msg: any, type: MessageType): NotificationType | null {
   const isAgreement =
     hasAny(["docs.google.com", "drive.google.com"]) && has("agreement");
 
-  // Priority order
+  // --- Priority order --------------------------------------------------------
+  // 1) When the bot is first added, schedule a "call link sent?" reminder (3h later).
+  if (isBotJoinCallCheck) return "follow_up_bot_join_call_check";
+
+  // 2) Content-based follow-ups
   if (isProposalDoc) return "follow_up_proposal_1st";
   if (isInvoiceDoc) return "follow_up_invoice_1st";
   if (isCalendly) return "follow_up_calendly";
@@ -209,19 +247,36 @@ export async function handleFollowupTriggers(params: {
 
   // 4) Resolve Slack targets once
   let slackTargets: Array<{ teamId: string; userId: string }> = [];
-  const tgUserId = String(msg.from?.id ?? "");
-  if (tgUserId) {
-    const peopleSnap = await db
-      .collection("people")
-      .where("telegram.userId", "==", tgUserId)
-      .limit(1)
-      .get();
-    if (!peopleSnap.empty) {
-      const personDoc = peopleSnap.docs[0]!.data();
-      slackTargets = (personDoc.slack ?? []).map((s: any) => ({
-        teamId: s.teamId,
-        userId: s.userId,
-      }));
+
+  // NOTE: For bot-join reminder, mention ALL teammates (except "Pochi")
+  const EXCLUDE_PERSON_ID = "9TGPDbETSkKda8F6zmyS";
+
+  if (baseType === "follow_up_bot_join_call_check") {
+    const allPeopleSnap = await db.collection("people").get();
+    slackTargets = allPeopleSnap.docs
+      .filter((d) => d.id !== EXCLUDE_PERSON_ID)
+      .flatMap((d) =>
+        (d.data().slack ?? []).map((s: any) => ({
+          teamId: s.teamId,
+          userId: s.userId,
+        })),
+      )
+      .filter((t) => t.teamId && t.userId); // sanitize
+  } else {
+    // default: only the sender (existing behavior)
+    const tgUserId = String(msg.from?.id ?? "");
+    if (tgUserId) {
+      const peopleSnap = await db
+        .collection("people")
+        .where("telegram.userId", "==", tgUserId)
+        .limit(1)
+        .get();
+      if (!peopleSnap.empty) {
+        const personDoc = peopleSnap.docs[0]!.data();
+        slackTargets = (personDoc.slack ?? [])
+          .map((s: any) => ({ teamId: s.teamId, userId: s.userId }))
+          .filter((t: any) => t.teamId && t.userId);
+      }
     }
   }
 
