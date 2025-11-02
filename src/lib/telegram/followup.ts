@@ -79,7 +79,8 @@ function getFollowupType(msg: any, type: MessageType): NotificationType | null {
   const hasAny = (kws: string[]) => kws.some((k) => combined.includes(k));
 
   // Matchers (keep priority semantics in the return section)
-  const isProposalDoc = type === "document" && has("proposal");
+  const isProposalDoc =
+    hasAny(["docs.google.com", "drive.google.com"]) && has("proposal");
   const isInvoiceDoc = type === "document" && has("invoice");
   const isCalendly = has("calendly.com");
   const isAgreement =
@@ -199,11 +200,11 @@ export async function handleFollowupTriggers(params: {
   const caption = String(msg.caption ?? "");
   const fileInfo = msg?.document
     ? {
-        fileId: msg.document.file_id ?? null,
-        fileName: msg.document.file_name ?? null,
-        mimeType: msg.document.mime_type ?? null,
-        fileSize: msg.document.file_size ?? null,
-      }
+      fileId: msg.document.file_id ?? null,
+      fileName: msg.document.file_name ?? null,
+      mimeType: msg.document.mime_type ?? null,
+      fileSize: msg.document.file_size ?? null,
+    }
     : null;
 
   // 4) Resolve Slack targets once
