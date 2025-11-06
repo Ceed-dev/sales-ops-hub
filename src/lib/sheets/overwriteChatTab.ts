@@ -13,10 +13,10 @@ import type { ChatRow } from "./getLatestTelegramChats.js";
  *
  * Behavior:
  *  - Clears values in A2:Z (header preserved)
- *  - Writes rows starting at A2 as [id, title]
+ *  - Writes rows starting at A2 as [id, title, ...]
  *
  * @param spreadsheetId Google Spreadsheet (file) ID
- * @param chats         Array of chat rows to write (e.g., [{ id, title }, ...])
+ * @param chats         Array of chat rows to write (e.g., [{ id, title, ... }, ...])
  * @param tabName       Target tab (sheet) name. Defaults to "Chat"
  */
 export async function overwriteChatTab(
@@ -45,7 +45,15 @@ export async function overwriteChatTab(
 
   // --- 4) Map ChatRow[] -> 2D values array and write from A2 -----------------
   // NOTE: Extend this mapping when you add more columns (e.g., memberCount, updatedAt).
-  const values = chats.map(({ id, title }) => [id, title]);
+  const values = chats.map(
+    ({ id, title, latestMsgFrom, latestMsgAt, latestMsgSummary }) => [
+      id,
+      title,
+      latestMsgFrom,
+      latestMsgAt,
+      latestMsgSummary,
+    ],
+  );
 
   await sheets.spreadsheets.values.update({
     spreadsheetId,
