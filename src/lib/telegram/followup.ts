@@ -238,23 +238,28 @@ export async function handleFollowupTriggers(params: {
   const caption = String(msg.caption ?? "");
   const fileInfo = msg?.document
     ? {
-      fileId: msg.document.file_id ?? null,
-      fileName: msg.document.file_name ?? null,
-      mimeType: msg.document.mime_type ?? null,
-      fileSize: msg.document.file_size ?? null,
-    }
+        fileId: msg.document.file_id ?? null,
+        fileName: msg.document.file_name ?? null,
+        mimeType: msg.document.mime_type ?? null,
+        fileSize: msg.document.file_size ?? null,
+      }
     : null;
 
   // 4) Resolve Slack targets once
   let slackTargets: Array<{ teamId: string; userId: string }> = [];
 
-  // NOTE: For bot-join reminder, mention ALL teammates (except "Pochi")
-  const EXCLUDE_PERSON_ID = "9TGPDbETSkKda8F6zmyS";
+  // NOTE: For bot-join reminder, mention ONLY specific teammates
+  const INCLUDE_PERSON_IDS = [
+    "0UvQYfArgM2TrluTjUEX", // Badhan
+    "UDCrchwnyUdsWB6KIQgV", // Jaz
+    "lDuGIr68v1OJ4hJUMZEC", // Hugo
+  ];
 
   if (baseType === "follow_up_bot_join_call_check") {
     const allPeopleSnap = await db.collection("people").get();
     slackTargets = allPeopleSnap.docs
-      .filter((d) => d.id !== EXCLUDE_PERSON_ID)
+      // --- Include only specific people ---
+      .filter((d) => INCLUDE_PERSON_IDS.includes(d.id))
       .flatMap((d) =>
         (d.data().slack ?? []).map((s: any) => ({
           teamId: s.teamId,
