@@ -49,15 +49,16 @@ This guarantees the sheet always reflects the exact state of Firestore.
 
 ### `Chat` Sheet
 
-| COLUMN               | DESCRIPTION                                                                               |
-| -------------------- | ----------------------------------------------------------------------------------------- |
-| `ID`                 | Telegram group chat ID                                                                    |
-| `TITLE`              | Chat title                                                                                |
-| `PHASE`              | Current lifecycle phase of the chat (e.g., `BotAdded`, `ProposalSent`, `InvoiceSent`)     |
-| `LATEST_MSG_FROM`    | Username of the sender of the latest message                                              |
-| `LATEST_MSG_AT`      | Timestamp of the latest message (JST, formatted as `YYYY/MM/DD HH:mm JST`)                |
-| `LATEST_MSG_SUMMARY` | Summary or snippet of the latest message                                                  |
-| `BOT_ADDED_AT`       | Timestamp when the bot was first added to the chat (JST, from `botActivityHistory[0].ts`) |
+| COLUMN                | DESCRIPTION                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------- |
+| `ID`                  | Telegram group chat ID                                                                    |
+| `TITLE`               | Chat title                                                                                |
+| `PHASE`               | Current lifecycle phase of the chat (e.g., `BotAdded`, `ProposalSent`, `InvoiceSent`)     |
+| `LATEST_MSG_FROM`     | Username of the sender of the latest message                                              |
+| `LATEST_MSG_AT (JST)` | Timestamp of the latest message (JST, formatted as `YYYY/MM/DD HH:mm`)                    |
+| `DAYS_SINCE_LAST_MSG` | Whole days since the latest message (integer, computed at sync time)                      |
+| `LATEST_MSG_SUMMARY`  | Summary or snippet of the latest message                                                  |
+| `BOT_ADDED_AT (JST)`  | Timestamp when the bot was first added to the chat (JST, from `botActivityHistory[0].ts`) |
 
 ---
 

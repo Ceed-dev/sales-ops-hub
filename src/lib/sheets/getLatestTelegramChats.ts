@@ -2,7 +2,7 @@
 // Fetch the latest Telegram group chat (GC) data from Firestore.
 // - Reads all documents from the "tg_chats" collection
 // - Supports pagination to safely fetch large datasets
-// - Returns an array of { id, title, phase, latestMsgFrom, latestMsgAt, latestMsgSummary, botAddedAt }
+// - Returns an array of { id, title, phase, latestMsgFrom, latestMsgAt, daysSinceLastMsg, latestMsgSummary, botAddedAt }
 // -----------------------------------------------------------------------------
 
 import { db } from "../firebase.js";
@@ -14,6 +14,7 @@ export type ChatRow = {
   phase: string;
   latestMsgFrom: string;
   latestMsgAt: string;
+  daysSinceLastMsg: number;
   latestMsgSummary: string;
   botAddedAt: string;
 };
@@ -133,12 +134,31 @@ export async function getLatestTelegramChats(
       const d: any = doc.data() ?? {};
       const lm = d.latestMessage ?? {};
 
+      // compute whole days since latest message (min 0)
+      const latestDate: Date | null =
+        typeof lm?.sentAt?.toDate === "function"
+          ? lm.sentAt.toDate()
+          : lm?.sentAt instanceof Date
+            ? lm.sentAt
+            : typeof lm?.sentAt === "string" || typeof lm?.sentAt === "number"
+              ? new Date(lm.sentAt)
+              : null;
+
+      const daysSinceLastMsg =
+        latestDate && !Number.isNaN(latestDate.getTime())
+          ? Math.max(
+              0,
+              Math.floor((Date.now() - latestDate.getTime()) / 86_400_000),
+            )
+          : 0;
+
       rows.push({
         id: doc.id,
         title: (d.title as string) ?? "",
         phase: d.phase.value ?? "",
         latestMsgFrom: lm.fromUsername ?? "",
         latestMsgAt: toJstString(lm.sentAt) ?? "",
+        daysSinceLastMsg,
         latestMsgSummary: lm.summary ?? "",
         botAddedAt: toJstString(d.botActivityHistory?.[0]?.ts) ?? "",
       });
