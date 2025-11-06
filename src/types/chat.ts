@@ -4,10 +4,34 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import type { MessageType } from "./message.js";
+import type { NotificationType } from "./notification.js";
 
 export type ChatStatus = "active" | "archived";
 export type ChatTag = "Defi" | "Japan" | "Game" | "NFT" | "Other";
 export type ChatType = "private" | "group" | "supergroup" | "channel" | string;
+
+// -----------------------------------------------------------------------------
+// High-level lifecycle phase of the chat.
+// Determined based on the existence of specific follow-up notification types.
+// -----------------------------------------------------------------------------
+
+export type ChatPhase =
+  | "BotAdded" // Exists: follow_up_bot_join_call_check notification
+  | "CalendlyLinkShared" // Exists: follow_up_calendly notification
+  | "ProposalSent" // Exists: follow_up_proposal_1st notification
+  | "AgreementSent" // Exists: follow_up_agreement_1st notification
+  | "InvoiceSent"; // Exists: follow_up_invoice_1st notification
+
+// -----------------------------------------------------------------------------
+// Map follow-up job types → ChatPhase (only base/1st types advance the phase)
+// -----------------------------------------------------------------------------
+export const PHASE_BY_NOTIF: Partial<Record<NotificationType, ChatPhase>> = {
+  follow_up_bot_join_call_check: "BotAdded",
+  follow_up_calendly: "CalendlyLinkShared",
+  follow_up_proposal_1st: "ProposalSent",
+  follow_up_agreement_1st: "AgreementSent",
+  follow_up_invoice_1st: "InvoiceSent",
+};
 
 interface AggregatedPeriod {
   // Pre-computed totals for a rolling window (e.g., last 7/30/90 days).
@@ -90,6 +114,12 @@ export interface ChatRoomDoc {
 
   // --- Lifecycle / state ---
   status: ChatStatus; // "active" while bot is in the chat; "archived" when removed
+  phase: {
+    value: ChatPhase; // Current lifecycle phase (e.g., "BotAdded", "InvoiceSent", etc.)
+    ts: Timestamp; // Time when this phase was set
+    messageId: string; // Trigger message ID that caused this phase
+  };
+
   botActivityHistory: Array<{
     status: ChatStatus; // State after the event
     ts: Timestamp; // Event time (UTC)
