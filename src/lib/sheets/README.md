@@ -62,6 +62,44 @@ This guarantees the sheet always reflects the exact state of Firestore.
 
 ---
 
+## Chat Phase Lifecycle
+
+The `PHASE` column reflects a high-level lifecycle of each chat.  
+Phases are **set on creation** and **advance automatically** when specific follow-up notifications are created.
+
+### Phase Types
+
+- **BotAdded** – set when the bot is first added to the chat.
+- **CalendlyLinkShared** – set when a `follow_up_calendly` job is created.
+- **ProposalSent** – set when a `follow_up_proposal_1st` job is created.
+- **AgreementSent** – set when a `follow_up_agreement_1st` job is created.
+- **InvoiceSent** – set when a `follow_up_invoice_1st` job is created.
+
+### Update Rules
+
+- **Trigger:** phase advances **when the corresponding follow-up job is created** (existence-based).
+- **Monotonic:** phases only move **forward** in this order:  
+  `BotAdded → CalendlyLinkShared → ProposalSent → AgreementSent → InvoiceSent`
+- **Idempotent:** repeated triggers with the **same message** do **not** change the phase.
+- **Non-advancing jobs:** second reminders (e.g., `_2nd`) **do not** advance phase.
+- **Stored shape:** Firestore stores the current phase as  
+  `phase = { value: <ChatPhase>, ts: <Timestamp>, messageId: <string> }`.
+
+### Mapping (Jobs → Phase)
+
+| Follow-up Job Type              | Phase                |
+| ------------------------------- | -------------------- |
+| `follow_up_bot_join_call_check` | `BotAdded`           |
+| `follow_up_calendly`            | `CalendlyLinkShared` |
+| `follow_up_proposal_1st`        | `ProposalSent`       |
+| `follow_up_agreement_1st`       | `AgreementSent`      |
+| `follow_up_invoice_1st`         | `InvoiceSent`        |
+
+> On new chat creation, `phase.value` starts as `BotAdded`.  
+> During sheet sync, we display `phase.value` (and compute `DAYS_SINCE_LAST_MSG` separately).
+
+---
+
 ## Future Extensions
 
 - Additional columns (e.g. `memberCount`, `latestMessage`, `updatedAt`) can be added to both Firestore and the sheet.
