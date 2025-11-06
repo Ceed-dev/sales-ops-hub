@@ -47,6 +47,11 @@ export function buildNewChatRoomDoc(params: {
     title: msg.chat.title ?? "",
     tags: [],
     status: botActivityHistoryEntry?.status ?? "active",
+    phase: {
+      value: "BotAdded",
+      ts: sentAt,
+      messageId: String(msg.message_id),
+    },
     botActivityHistory: botActivityHistoryEntry
       ? [botActivityHistoryEntry]
       : [],

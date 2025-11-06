@@ -14,6 +14,8 @@ import type {
   NotificationType,
   NotificationJobDoc,
 } from "../../types/notification.js";
+import { PHASE_BY_NOTIF } from "../../types/chat.js";
+import { upsertChatPhaseIfAdvanced } from "./updateChatPhase.js";
 
 /**
  * Build one or more follow-up schedules for a detected notification type.
@@ -205,6 +207,17 @@ async function createJobAndTask(args: {
     payload: { jobId },
     scheduledAt,
   });
+
+  // --- Advance chat.phase if this notif type maps to a higher phase ---
+  const mappedPhase = PHASE_BY_NOTIF[notifType];
+  if (mappedPhase) {
+    // Monotonic/idempotent inside the helper
+    await upsertChatPhaseIfAdvanced(chatId, {
+      value: mappedPhase,
+      ts: Timestamp.now(),
+      messageId,
+    });
+  }
 
   console.log("[followup] scheduled:", notifType, scheduledAt.toDate(), jobId);
 }
