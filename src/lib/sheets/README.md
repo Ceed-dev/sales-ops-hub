@@ -53,6 +53,7 @@ This guarantees the sheet always reflects the exact state of Firestore.
 | -------------------- | ----------------------------------------------------------------------------------------- |
 | `ID`                 | Telegram group chat ID                                                                    |
 | `TITLE`              | Chat title                                                                                |
+| `PHASE`              | Current lifecycle phase of the chat (e.g., `BotAdded`, `ProposalSent`, `InvoiceSent`)     |
 | `LATEST_MSG_FROM`    | Username of the sender of the latest message                                              |
 | `LATEST_MSG_AT`      | Timestamp of the latest message (JST, formatted as `YYYY/MM/DD HH:mm JST`)                |
 | `LATEST_MSG_SUMMARY` | Summary or snippet of the latest message                                                  |
