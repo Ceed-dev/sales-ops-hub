@@ -132,4 +132,7 @@ export interface ChatRoomDoc {
 
   // --- Analytics ---
   stats: ChatStats;
+
+  // --- Weekly reporting ---
+  latestReportId: string | null; // Most recent weeklyRuns doc.id linked to this chat (null if none)
 }

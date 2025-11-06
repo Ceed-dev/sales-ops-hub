@@ -7,7 +7,8 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db } from "../firebase.js";
 
 /**
- * Saves an AI-generated report to Firestore under the chat’s reports subcollection.
+ * Saves an AI-generated report to Firestore under the chat’s reports subcollection,
+ * and updates tg_chats/{chatId}.latestReportId to the new report’s ID.
  *
  * @param chatId - Telegram chat ID (string)
  * @param result - The object returned from summarizeWithAI(), containing summary data
@@ -22,23 +23,26 @@ export async function saveReportToFirestore(
   },
 ): Promise<void> {
   try {
-    // Reference: tg_chats/{chatId}/reports/{autoId}
-    const ref = db
-      .collection("tg_chats")
-      .doc(chatId)
-      .collection("reports")
-      .doc(); // auto-generated ID
+    const chatRef = db.collection("tg_chats").doc(chatId);
+    const reportRef = chatRef.collection("reports").doc(); // auto ID
 
-    // Write report document
-    await ref.set({
-      summary: result.summary,
-      bullets: result.bullets,
-      usage: result.usage,
-      finishReason: result.finishReason,
-      createdAt: Timestamp.now(),
+    await db.runTransaction(async (tx) => {
+      // --- 1. create report doc ---
+      tx.set(reportRef, {
+        summary: result.summary,
+        bullets: result.bullets,
+        usage: result.usage,
+        finishReason: result.finishReason,
+        createdAt: Timestamp.now(),
+      });
+
+      // --- 2. update parent latestReportId ---
+      tx.update(chatRef, { latestReportId: reportRef.id });
     });
 
-    console.log(`✅ Report saved to tg_chats/${chatId}/reports/${ref.id}`);
+    console.log(
+      `✅ Report saved & latestReportId updated: ${chatId} → ${reportRef.id}`,
+    );
   } catch (err) {
     console.error(`❌ Failed to save report for chat ${chatId}:`, err);
     throw err;
