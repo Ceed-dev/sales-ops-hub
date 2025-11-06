@@ -46,13 +46,14 @@ export async function overwriteChatTab(
   // --- 4) Map ChatRow[] -> 2D values array and write from A2 -----------------
   // NOTE: Extend this mapping when you add more columns (e.g., memberCount, updatedAt).
   const values = chats.map(
-    ({ id, title, latestMsgFrom, latestMsgAt, latestMsgSummary }) => [
+    ({
       id,
       title,
       latestMsgFrom,
       latestMsgAt,
       latestMsgSummary,
-    ],
+      botAddedAt,
+    }) => [id, title, latestMsgFrom, latestMsgAt, latestMsgSummary, botAddedAt],
   );
 
   await sheets.spreadsheets.values.update({
