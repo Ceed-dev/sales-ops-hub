@@ -34,6 +34,8 @@ import {
   handleHistoryCommand,
 } from "./lib/weeklyReport/commands/index.js";
 
+import { syncTelegramChatsToSheet } from "./lib/sheets/syncTelegramChatsToSheet.js";
+
 // -----------------------------------------------------------------------------
 // Firestore data types
 // -----------------------------------------------------------------------------
@@ -892,6 +894,22 @@ app.post("/api/weekly/run", async (req, res) => {
 
 app.post("/api/weekly/history", async (req, res) => {
   await handleHistoryCommand(req, res);
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/sheets/sync
+// -----------------------------------------------------------------------------
+// Triggers Firestore → Google Sheets sync for Telegram chats.
+// -----------------------------------------------------------------------------
+
+app.post("/api/sheets/sync", async (_, res) => {
+  try {
+    await syncTelegramChatsToSheet();
+    res.status(200).json({ ok: true, message: "Sync completed successfully." });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
 });
 
 // -----------------------------------------------------------------------------
