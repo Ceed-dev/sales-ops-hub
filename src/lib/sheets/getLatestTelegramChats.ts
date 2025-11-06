@@ -2,7 +2,7 @@
 // Fetch the latest Telegram group chat (GC) data from Firestore.
 // - Reads all documents from the "tg_chats" collection
 // - Supports pagination to safely fetch large datasets
-// - Returns an array of { id, title, latestMsgFrom, latestMsgAt, latestMsgSummary }
+// - Returns an array of { id, title, latestMsgFrom, latestMsgAt, latestMsgSummary, botAddedAt }
 // -----------------------------------------------------------------------------
 
 import { db } from "../firebase.js";
@@ -14,6 +14,7 @@ export type ChatRow = {
   latestMsgFrom: string;
   latestMsgAt: string;
   latestMsgSummary: string;
+  botAddedAt: string;
 };
 
 /** Optional parameters to control query behavior */
@@ -142,6 +143,7 @@ export async function getLatestTelegramChats(
         latestMsgFrom: lm.fromUsername ?? "",
         latestMsgAt: toJstString(lm.sentAt) ?? "",
         latestMsgSummary: lm.summary ?? "",
+        botAddedAt: toJstString(d.botActivityHistory?.[0]?.ts) ?? "",
       });
     }
 
