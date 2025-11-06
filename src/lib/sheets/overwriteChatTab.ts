@@ -52,6 +52,7 @@ export async function overwriteChatTab(
       phase,
       latestMsgFrom,
       latestMsgAt,
+      daysSinceLastMsg,
       latestMsgSummary,
       botAddedAt,
     }) => [
@@ -60,6 +61,7 @@ export async function overwriteChatTab(
       phase,
       latestMsgFrom,
       latestMsgAt,
+      daysSinceLastMsg,
       latestMsgSummary,
       botAddedAt,
     ],
