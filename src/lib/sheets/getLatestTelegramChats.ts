@@ -30,23 +30,18 @@ export type ListChatsOptions = {
 
 /**
  * Convert various timestamp inputs (Firestore Timestamp | Date | ISO string | epoch ms)
- * into a Japan Standard Time string formatted as "YYYY/MM/DD HH:mm JST".
+ * into a Japan Standard Time string formatted as "YYYY/MM/DD HH:mm".
  *
- * - Accepts:
- *   - Firestore Timestamp-like object (has `toDate(): Date`)
- *   - native `Date`
- *   - ISO 8601 string (e.g., "2025-11-06T07:23:00.000Z")
- *   - epoch milliseconds (number)
- * - Returns:
- *   - Formatted string in JST: "YYYY/MM/DD HH:mm JST"
- *   - `null` if input is falsy or cannot be parsed into a valid Date
+ * @param ts - Input timestamp (Firestore Timestamp, Date, ISO string, or epoch ms)
+ * @param withZone - Whether to append "JST" (default: false)
+ * @returns Formatted string in JST, or null if invalid
+ *
+ * Example:
+ *  toJstString(Timestamp.now())               → "2025/11/06 16:23"
+ *  toJstString(Timestamp.now(), true)        → "2025/11/06 16:23 JST"
+ *  toJstString("2025-11-06T07:23:00Z", true) → "2025/11/06 16:23 JST"
  */
-// --- Example ---
-// const s = toJstString(Timestamp.now());         // "2025/11/06 16:23 JST"
-// const s2 = toJstString("2025-11-06T07:23:00Z"); // "2025/11/06 16:23 JST"
-// const s3 = toJstString(Date.now());             // "2025/11/06 16:23 JST"
-
-export function toJstString(ts?: unknown): string | null {
+export function toJstString(ts?: unknown, withZone = false): string | null {
   if (ts == null) return null;
 
   // Normalize input → native Date
@@ -88,7 +83,7 @@ export function toJstString(ts?: unknown): string | null {
     hour12: false,
   }).format(date);
 
-  return `${jst} JST`;
+  return withZone ? `${jst} JST` : jst;
 }
 
 /**
@@ -141,7 +136,7 @@ export async function getLatestTelegramChats(
       rows.push({
         id: doc.id,
         title: (d.title as string) ?? "",
-        phase: d.phase?.value ?? "",
+        phase: d.phase.value ?? "",
         latestMsgFrom: lm.fromUsername ?? "",
         latestMsgAt: toJstString(lm.sentAt) ?? "",
         latestMsgSummary: lm.summary ?? "",
