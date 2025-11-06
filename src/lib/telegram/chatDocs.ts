@@ -66,6 +66,7 @@ export function buildNewChatRoomDoc(params: {
     },
     lastActiveAt: sentAt,
     stats: defaultChatStats(),
+    latestReportId: null,
   };
 }
 
