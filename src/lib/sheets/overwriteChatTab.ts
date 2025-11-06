@@ -49,11 +49,20 @@ export async function overwriteChatTab(
     ({
       id,
       title,
+      phase,
       latestMsgFrom,
       latestMsgAt,
       latestMsgSummary,
       botAddedAt,
-    }) => [id, title, latestMsgFrom, latestMsgAt, latestMsgSummary, botAddedAt],
+    }) => [
+      id,
+      title,
+      phase,
+      latestMsgFrom,
+      latestMsgAt,
+      latestMsgSummary,
+      botAddedAt,
+    ],
   );
 
   await sheets.spreadsheets.values.update({
