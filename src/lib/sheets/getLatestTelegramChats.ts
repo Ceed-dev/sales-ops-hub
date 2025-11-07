@@ -6,6 +6,8 @@
 // -----------------------------------------------------------------------------
 
 import { db } from "../firebase.js";
+import { PHASE_PRIORITY } from "../telegram/updateChatPhase.js";
+import type { ChatPhase } from "../../types/chat.js";
 
 /** Represents a single Telegram group chat row */
 export type ChatRow = {
@@ -23,8 +25,8 @@ export type ChatRow = {
 export type ListChatsOptions = {
   /** Whether to fetch only chats with status == "active" */
   filterActiveOnly?: boolean;
-  /** Field to sort by ("id" is sorted in-memory after fetch) */
-  orderBy?: "id" | "title" | "lastActiveAt";
+  /** Field to sort by ("id" and "phase" are sorted in-memory after fetch) */
+  orderBy?: "id" | "title" | "lastActiveAt" | "phase-asc" | "phase-desc";
   /** Maximum number of documents to fetch per query (for pagination) */
   pageSize?: number;
 };
@@ -97,7 +99,11 @@ export function toJstString(ts?: unknown, withZone = false): string | null {
 export async function getLatestTelegramChats(
   opts: ListChatsOptions = {},
 ): Promise<ChatRow[]> {
-  const { filterActiveOnly = false, orderBy = "id", pageSize = 1000 } = opts;
+  const {
+    filterActiveOnly = false,
+    orderBy = "phase-asc",
+    pageSize = 1000,
+  } = opts;
 
   // --- 1. Build Firestore query base ----------------------------------------
   const col = db.collection("tg_chats");
@@ -171,9 +177,15 @@ export async function getLatestTelegramChats(
     if (snap.size < pageSize) break;
   }
 
-  // --- 3. In-memory sort when orderBy = "id" --------------------------------
+  // --- 3. In-memory sort -------------------------------------------------------
+  const prio = (p: unknown): number => PHASE_PRIORITY[p as ChatPhase] ?? 0;
+
   if (orderBy === "id") {
     rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  } else if (orderBy === "phase-asc") {
+    rows.sort((a, b) => prio(a.phase) - prio(b.phase));
+  } else if (orderBy === "phase-desc") {
+    rows.sort((a, b) => prio(b.phase) - prio(a.phase));
   }
 
   // --- 4. Return the aggregated results -------------------------------------

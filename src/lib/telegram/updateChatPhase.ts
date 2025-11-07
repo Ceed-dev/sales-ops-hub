@@ -11,7 +11,7 @@ import type { ChatPhase } from "../../types/chat.js";
 // -----------------------------------------------------------------------------
 // Phase priority mapping (higher = later in lifecycle)
 // -----------------------------------------------------------------------------
-const PHASE_PRIORITY: Record<ChatPhase, number> = {
+export const PHASE_PRIORITY: Record<ChatPhase, number> = {
   BotAdded: 1,
   CalendlyLinkShared: 2,
   ProposalSent: 3,
