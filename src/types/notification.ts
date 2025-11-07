@@ -116,6 +116,9 @@ export interface NotificationDeliveryDoc {
   // --- Provenance ---
   source: { kind: string; id: string }; // original origin (copied from job.source)
 
+  // --- Payload ---
+  payload?: Record<string, unknown>; // dynamic fields for template substitution
+
   // --- Audit ---
   createdAt: Timestamp; // record creation time
 }
