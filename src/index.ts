@@ -607,6 +607,7 @@ app.post("/tasks/notifications", async (req, res) => {
       finishedAt,
       durationMs,
       source: job.source,
+      payload: job.payload,
       createdAt: finishedAt,
     } as Omit<NotificationDeliveryDoc, "deliveryId">);
     await deliveryRef.update({ deliveryId: deliveryRef.id });
@@ -633,6 +634,7 @@ app.post("/tasks/notifications", async (req, res) => {
       finishedAt,
       durationMs,
       source: job.source,
+      payload: job.payload,
       createdAt: finishedAt,
     } as Omit<NotificationDeliveryDoc, "deliveryId">);
     await deliveryRef.update({ deliveryId: deliveryRef.id });
@@ -660,6 +662,7 @@ app.post("/tasks/notifications", async (req, res) => {
       finishedAt,
       durationMs,
       source: job.source,
+      payload: job.payload,
       createdAt: finishedAt,
     } as Omit<NotificationDeliveryDoc, "deliveryId">);
     await deliveryRef.update({ deliveryId: deliveryRef.id });
@@ -710,6 +713,7 @@ app.post("/tasks/notifications", async (req, res) => {
       finishedAt,
       durationMs,
       source: job.source,
+      payload: job.payload,
       createdAt: finishedAt,
     } as Omit<NotificationDeliveryDoc, "deliveryId">);
     await deliveryRef.update({ deliveryId: deliveryRef.id });
@@ -760,6 +764,7 @@ app.post("/tasks/notifications", async (req, res) => {
       finishedAt,
       durationMs,
       source: job.source,
+      payload: job.payload,
       createdAt: finishedAt,
     } as Omit<NotificationDeliveryDoc, "deliveryId">);
     await deliveryRef.update({ deliveryId: deliveryRef.id });
@@ -799,6 +804,7 @@ app.post("/tasks/notifications", async (req, res) => {
       finishedAt,
       durationMs,
       source: job.source,
+      payload: job.payload,
       createdAt: finishedAt,
     } as Omit<NotificationDeliveryDoc, "deliveryId">);
     await deliveryRef.update({ deliveryId: deliveryRef.id });
