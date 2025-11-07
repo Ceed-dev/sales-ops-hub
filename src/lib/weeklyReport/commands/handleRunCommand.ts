@@ -147,11 +147,17 @@ export async function handleRunCommand(req: Request, res: Response) {
     // -------------------------------------------------------------------------
     // 6) Slack notification (optional; title carries [DRY RUN] if applicable)
     // -------------------------------------------------------------------------
-    if (notifySlack && !isNoMessages) {
+    const hasBullets =
+      Array.isArray(result.bullets) && result.bullets.length > 0;
+    if (notifySlack && !isNoMessages && hasBullets) {
       const titleForSlack = dryRun ? `[DRY RUN] ${chatTitle}` : chatTitle;
       await sendReportToSlack(result, titleForSlack);
     } else if (notifySlack && isNoMessages) {
-      console.log("⚪ No messages in period — Slack notification skipped.");
+      console.log(
+        `⚪ Slack notification skipped: ${
+          isNoMessages ? "no messages in period" : "no bullets generated"
+        }`,
+      );
     }
 
     // -------------------------------------------------------------------------

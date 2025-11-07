@@ -84,11 +84,17 @@ export async function runWeeklyReport(): Promise<void> {
       // Step 7. Deliver to Slack (only when there were messages)
       // - Prefer input.target.name for a human-readable title
       // -----------------------------------------------------------------------
-      if (!isNoMessages) {
+      const hasBullets =
+        Array.isArray(result.bullets) && result.bullets.length > 0;
+      if (!isNoMessages && hasBullets) {
         await sendReportToSlack(result, setting.name);
         console.log("✅ Report delivered to Slack.");
       } else {
-        console.log("⚪ No messages in period — Slack notification skipped.");
+        console.log(
+          `⚪ Slack notification skipped: ${
+            isNoMessages ? "no messages in period" : "no bullets generated"
+          }`,
+        );
       }
 
       // -----------------------------------------------------------------------
