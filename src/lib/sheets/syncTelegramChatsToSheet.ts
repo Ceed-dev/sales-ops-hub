@@ -30,7 +30,6 @@ export async function syncTelegramChatsToSheet() {
     // 1) Fetch all chats from Firestore
     const chats = await getLatestTelegramChats({
       filterActiveOnly: true, // Change if needed
-      orderBy: "id",
     });
     console.log(
       `[syncTelegramChatsToSheet] fetched ${chats.length} chats from Firestore`,
