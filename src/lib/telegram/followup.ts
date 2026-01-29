@@ -263,7 +263,7 @@ export async function handleFollowupTriggers(params: {
 
   // NOTE: For bot-join reminder, mention ONLY specific teammates
   const INCLUDE_PERSON_IDS = [
-    "0UvQYfArgM2TrluTjUEX", // Badhan
+    "0agUxUrz9z6tIw95x32I", // Srijan
     "UDCrchwnyUdsWB6KIQgV", // Jaz
     "lDuGIr68v1OJ4hJUMZEC", // Hugo
   ];
