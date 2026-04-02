@@ -14,8 +14,6 @@ const INTERNAL_USER_IDS = new Set<string>([
   "7888860699", // Srijanweb3
   "6288713798", // pochi_udon
   "1878347283", // Draken0004
-  "951221958", // jazcomoda
-  "5559185358", // Hugo_kayo
   "6292079093", // ronaparajit
 ]);
 
