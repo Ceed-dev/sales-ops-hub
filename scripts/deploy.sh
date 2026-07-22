@@ -50,6 +50,8 @@ REQUIRED_SECRETS=(
   TELEGRAM_WEBHOOK_SECRET
   MESSAGE_TTL_DAYS
   PUBLIC_BASE_URL
+  EMAIL_TRACKING_ADMIN_TOKEN
+  EMAIL_TRACKING_SIGNING_SECRET
   VERTEX_API_KEY
 )
 
@@ -127,6 +129,27 @@ for key in "${REQUIRED_SECRETS[@]}"; do
   SET_SECRETS_FLAGS+=( --set-secrets "${key}=${key}:latest" )
 done
 
+log "Ensuring Firestore TTL policies..."
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=emailTrackingEvents \
+  --enable-ttl \
+  --project="${PROJECT_ID}" \
+  --quiet
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=emailTrackingRecipients \
+  --enable-ttl \
+  --project="${PROJECT_ID}" \
+  --quiet
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=emailTrackingRegistrations \
+  --enable-ttl \
+  --project="${PROJECT_ID}" \
+  --quiet
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=emailTrackingCampaignSummaryShards \
+  --disable-ttl \
+  --project="${PROJECT_ID}" \
+  --quiet
 # -----------------------
 # Deploy to Cloud Run
 # (Buildpacks; no Dockerfile required)

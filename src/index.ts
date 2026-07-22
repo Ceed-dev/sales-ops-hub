@@ -14,6 +14,7 @@ import { toUtcDayKey, formatJST } from "./utils/time.js";
 import { isDuplicateUpdateId } from "./utils/updateCache.js";
 import { resolveSlackUserIdByTelegramId } from "./utils/resolveSlackUserId.js";
 import { buildNotificationText } from "./utils/buildNotificationText.js";
+import { registerEmailTrackingRoutes } from "./lib/emailTracking.js";
 
 import { detectMessageType } from "./lib/telegram/messageType.js";
 import { generateSummary } from "./lib/telegram/summary.js";
@@ -54,6 +55,8 @@ import {
 // -----------------------------------------------------------------------------
 const app = express();
 app.use(express.json({ limit: "1mb" })); // default ~100kb, here set to 1MB
+
+registerEmailTrackingRoutes(app, db);
 
 // -----------------------------------------------------------------------------
 // POST /webhook/telegram
