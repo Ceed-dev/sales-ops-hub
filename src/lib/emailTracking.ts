@@ -28,6 +28,7 @@ const UTC_DATE_TIME_PATTERN =
 const ALLOWED_DESTINATION_HOSTS = new Set([
   "ceed.cloud",
   "www.ceed.cloud",
+  "lp.ceed.cloud",
   "calendly.com",
 ]);
 const EVENT_RETENTION_DAYS = 90;

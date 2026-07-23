@@ -51,6 +51,10 @@ test("click destinations require credential-free https URLs", () => {
     normalizeHttpsDestination("https://ceed.cloud/contact"),
     "https://ceed.cloud/contact",
   );
+  assert.equal(
+    normalizeHttpsDestination("https://lp.ceed.cloud/"),
+    "https://lp.ceed.cloud/",
+  );
   assert.throws(() => normalizeHttpsDestination("http://ceed.cloud"));
   assert.throws(() => normalizeHttpsDestination("https://user:pass@ceed.cloud"));
   assert.throws(() => normalizeHttpsDestination("https://example.com"));
