@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import sys
 import tempfile
 import unittest
 from email import message_from_bytes
@@ -78,6 +79,32 @@ class OutreachSenderTests(unittest.TestCase):
         for status in (401, 403, 429, 500):
             self.assertTrue(MODULE.is_fatal_http_error(FakeHttpError(status)))
         self.assertFalse(MODULE.is_fatal_http_error(FakeHttpError(400)))
+
+    def test_queue_paths_default_to_existing_campaign(self):
+        original_argv = sys.argv
+        try:
+            sys.argv = ["send_outreach_queue.py"]
+            args = MODULE.parse_args()
+        finally:
+            sys.argv = original_argv
+        self.assertEqual(args.queue_path, str(MODULE.QUEUE_PATH))
+        self.assertEqual(args.send_log_path, str(MODULE.SEND_LOG_PATH))
+
+    def test_queue_paths_can_be_overridden(self):
+        original_argv = sys.argv
+        try:
+            sys.argv = [
+                "send_outreach_queue.py",
+                "--queue-path",
+                "/tmp/new-queue.csv",
+                "--send-log-path",
+                "/tmp/new-log.csv",
+            ]
+            args = MODULE.parse_args()
+        finally:
+            sys.argv = original_argv
+        self.assertEqual(args.queue_path, "/tmp/new-queue.csv")
+        self.assertEqual(args.send_log_path, "/tmp/new-log.csv")
 
 
 if __name__ == "__main__":

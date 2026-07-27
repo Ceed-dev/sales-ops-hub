@@ -325,10 +325,12 @@ def run(args):
         except BlockingIOError as error:
             raise FatalSendError("another sender process is active") from error
 
-        queue_fields, queue_rows = load_csv(QUEUE_PATH)
-        log_fields, log_rows = load_csv(SEND_LOG_PATH)
+        queue_path = Path(args.queue_path)
+        send_log_path = Path(args.send_log_path)
+        queue_fields, queue_rows = load_csv(queue_path)
+        log_fields, log_rows = load_csv(send_log_path)
         if reconcile_queue(queue_rows, log_rows):
-            atomic_write_csv(QUEUE_PATH, queue_fields, queue_rows)
+            atomic_write_csv(queue_path, queue_fields, queue_rows)
         validate_queue(queue_rows, log_rows)
 
         credentials = load_credentials()
@@ -380,9 +382,9 @@ def run(args):
                     microsecond=0
                 ).isoformat().replace("+00:00", "Z")
                 append_success_log(log_rows, row, sent_at, message_id)
-                atomic_write_csv(SEND_LOG_PATH, log_fields, log_rows)
+                atomic_write_csv(send_log_path, log_fields, log_rows)
                 mark_queue_sent(row, sent_at)
-                atomic_write_csv(QUEUE_PATH, queue_fields, queue_rows)
+                atomic_write_csv(queue_path, queue_fields, queue_rows)
                 sent_count += 1
                 logging.info(
                     "sent order=%s variant=%s",
@@ -400,9 +402,9 @@ def run(args):
                     microsecond=0
                 ).isoformat().replace("+00:00", "Z")
                 append_error_log(log_rows, row, failed_at, error_text)
-                atomic_write_csv(SEND_LOG_PATH, log_fields, log_rows)
+                atomic_write_csv(send_log_path, log_fields, log_rows)
                 mark_queue_error(row, error_text)
-                atomic_write_csv(QUEUE_PATH, queue_fields, queue_rows)
+                atomic_write_csv(queue_path, queue_fields, queue_rows)
                 error_count += 1
                 logging.warning("skipped order=%s", row["全体順"])
             except (OSError, ValueError) as error:
@@ -435,6 +437,8 @@ def run(args):
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--queue-path", default=str(QUEUE_PATH))
+    parser.add_argument("--send-log-path", default=str(SEND_LOG_PATH))
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--test-recipient")
     parser.add_argument("--run-date", default="2026-07-24")
