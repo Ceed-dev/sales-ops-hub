@@ -247,10 +247,13 @@ def mark_queue_error(row, error_text):
     row["notes"] = f"個別送信エラー: {error_text[:160]}"
 
 
-def validate_queue(queue_rows, log_rows):
-    if len(queue_rows) != 500:
+def validate_queue(queue_rows, log_rows, expected_count=500):
+    if len(queue_rows) != expected_count:
         raise FatalSendError("queue row count changed")
-    if len({row["送信先"].strip().lower() for row in queue_rows}) != 500:
+    if (
+        len({row["送信先"].strip().lower() for row in queue_rows})
+        != expected_count
+    ):
         raise FatalSendError("queue recipients are not unique")
     duplicates = [
         order
@@ -331,7 +334,7 @@ def run(args):
         log_fields, log_rows = load_csv(send_log_path)
         if reconcile_queue(queue_rows, log_rows):
             atomic_write_csv(queue_path, queue_fields, queue_rows)
-        validate_queue(queue_rows, log_rows)
+        validate_queue(queue_rows, log_rows, args.expected_count)
 
         credentials = load_credentials()
         service = build(
@@ -446,6 +449,7 @@ def parse_args():
     parser.add_argument("--start-minute", type=int, default=0)
     parser.add_argument("--start-window-minutes", type=int, default=30)
     parser.add_argument("--max-messages", type=int, default=490)
+    parser.add_argument("--expected-count", type=int, default=500)
     parser.add_argument("--delay-seconds", type=int, default=60)
     parser.add_argument("--batch-size", type=int, default=50)
     parser.add_argument("--batch-pause-seconds", type=int, default=900)

@@ -106,6 +106,31 @@ class OutreachSenderTests(unittest.TestCase):
         self.assertEqual(args.queue_path, "/tmp/new-queue.csv")
         self.assertEqual(args.send_log_path, "/tmp/new-log.csv")
 
+    def test_expected_queue_count_can_be_overridden(self):
+        rows = [
+            {
+                **self.base_row(),
+                "送信先": f"recipient-{index}@example.com",
+                "status": "sent",
+                "全体順": str(index),
+            }
+            for index in range(1, 28)
+        ]
+        MODULE.validate_queue(rows, [], expected_count=27)
+        with self.assertRaisesRegex(
+            MODULE.FatalSendError, "queue row count changed"
+        ):
+            MODULE.validate_queue(rows, [], expected_count=500)
+
+    def test_expected_queue_count_defaults_to_500(self):
+        original_argv = sys.argv
+        try:
+            sys.argv = ["send_outreach_queue.py"]
+            args = MODULE.parse_args()
+        finally:
+            sys.argv = original_argv
+        self.assertEqual(args.expected_count, 500)
+
 
 if __name__ == "__main__":
     unittest.main()
