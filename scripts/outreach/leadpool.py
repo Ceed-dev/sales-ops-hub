@@ -11,11 +11,14 @@
 from __future__ import annotations
 
 import csv
+import fcntl
 import html
 import os
 import re
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -165,6 +168,38 @@ def save_pool(rows: list[dict]) -> None:
     atomic_write_csv(config.LEADS_POOL_PATH, POOL_FIELDS, rows)
 
 
+@contextmanager
+def pool_lock(timeout: int = 300):
+    """プールを read-modify-write する間の排他。
+
+    収集ジョブ(02:00)が長引くとキュー生成(07:00)と重なりうる。ロック無しでは
+    後から書いた側が相手の更新を消し、queued に落としたはずのリードが new へ
+    戻って二重送信につながる。
+    """
+    path = config.POOL_DIR / ".pool.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    with path.open("w", encoding="utf-8") as handle:
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise PoolLockTimeout(
+                        f"プールのロックを {timeout} 秒待っても取得できなかった: {path}"
+                    )
+                time.sleep(0.5)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+class PoolLockTimeout(RuntimeError):
+    pass
+
+
 def load_suppression() -> tuple[set[str], set[str]]:
     """配信停止・バウンス・断りのアドレスとドメイン。
 
@@ -289,6 +324,11 @@ def append_leads(new_rows: list[dict], run_date: str) -> dict:
     戻り値には追加数と除外理由の内訳を入れる。0 件でも例外にはしない
     （日次運用で目標未達のたびに異常終了させないため）。
     """
+    with pool_lock():
+        return _append_leads_locked(new_rows, run_date)
+
+
+def _append_leads_locked(new_rows: list[dict], run_date: str) -> dict:
     pool = load_pool()
     hist_emails, hist_companies, hist_domains = load_history_exclusions()
     pool_emails, pool_companies, pool_domains = pool_exclusions(pool)
@@ -364,34 +404,36 @@ def apply_suppression_to_pool() -> int:
 
     build_queue の除外だけに頼らず、プール本体にも反映して在庫数を正しくする。
     """
-    pool = load_pool()
-    supp_emails, supp_domains = load_suppression()
-    changed = 0
-    for row in pool:
-        if row.get("status") in {STATUS_SENT, STATUS_SUPPRESSED}:
-            continue
-        email = (row.get("email") or "").strip().lower()
-        domain = (row.get("domain") or "").strip().lower()
-        if email in supp_emails or domain in supp_domains:
-            row["status"] = STATUS_SUPPRESSED
-            row["hold_reason"] = "suppression_list"
-            changed += 1
-    if changed:
-        save_pool(pool)
-    return changed
+    with pool_lock():
+        pool = load_pool()
+        supp_emails, supp_domains = load_suppression()
+        changed = 0
+        for row in pool:
+            if row.get("status") in {STATUS_SENT, STATUS_SUPPRESSED}:
+                continue
+            email = (row.get("email") or "").strip().lower()
+            domain = (row.get("domain") or "").strip().lower()
+            if email in supp_emails or domain in supp_domains:
+                row["status"] = STATUS_SUPPRESSED
+                row["hold_reason"] = "suppression_list"
+                changed += 1
+        if changed:
+            save_pool(pool)
+        return changed
 
 
 def mark_status(lead_ids: set[str], status: str, **fields: str) -> int:
     """指定リードの status を更新する。"""
-    pool = load_pool()
-    changed = 0
-    for row in pool:
-        if row.get("lead_id") in lead_ids:
-            row["status"] = status
-            for key, value in fields.items():
-                if key in POOL_FIELDS:
-                    row[key] = value
-            changed += 1
-    if changed:
-        save_pool(pool)
-    return changed
+    with pool_lock():
+        pool = load_pool()
+        changed = 0
+        for row in pool:
+            if row.get("lead_id") in lead_ids:
+                row["status"] = status
+                for key, value in fields.items():
+                    if key in POOL_FIELDS:
+                        row[key] = value
+                changed += 1
+        if changed:
+            save_pool(pool)
+        return changed

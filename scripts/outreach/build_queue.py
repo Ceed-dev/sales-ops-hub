@@ -277,8 +277,20 @@ def main() -> int:
         return 0
 
     leads, held, stats = select_leads(args.target)
+    short = len(leads) < args.target and not args.allow_partial
 
-    if len(leads) < args.target and not args.allow_partial:
+    if args.dry_run:
+        # ドライランでは通知を出さない。検証のたびに Slack が鳴ると
+        # 本番の障害通知が埋もれる。
+        print(
+            json.dumps(
+                {"mode": "dry-run", "short_of_target": short, **stats},
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
+    if short:
         message = (
             f"{run_date} のキューを作れない。"
             f"送信可能なリードが {len(leads)} 件しかない"
@@ -287,12 +299,6 @@ def main() -> int:
         notify.alert("営業メール: キュー生成を中止した", message)
         print(json.dumps({"error": message, **stats}, ensure_ascii=False))
         return 1
-
-    if args.dry_run:
-        print(
-            json.dumps({"mode": "dry-run", **stats}, ensure_ascii=False)
-        )
-        return 0
 
     admin_token = config.tracking_admin_token()
     rows = build_rows(leads, run_date, admin_token)

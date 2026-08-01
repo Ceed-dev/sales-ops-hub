@@ -152,6 +152,9 @@ def resolve(domains, cache: dict | None = None, workers: int = 24) -> dict:
                 try:
                     results[domain] = future.result()
                 except Exception:  # noqa: BLE001
+                    # 再試行も失敗したら 1 回目の dns_temporary を残す。
+                    # 未判定は送信対象にならないため、握りつぶしても
+                    # 誤送信にはつながらない。翌日また照会される。
                     pass
     return results
 

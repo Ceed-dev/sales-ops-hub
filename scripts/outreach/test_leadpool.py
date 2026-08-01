@@ -197,6 +197,43 @@ class AppendLeadsTests(PoolIsolationMixin):
         self.assertEqual(stats["pool_total"], 0)
 
 
+class PoolLockTests(PoolIsolationMixin):
+    def test_lock_blocks_a_concurrent_writer(self):
+        """収集ジョブとキュー生成が重なっても更新が消えないこと。"""
+        import subprocess
+        import textwrap
+
+        env = dict(os.environ)
+        repo = str(Path(__file__).resolve().parents[2])
+        holder_code = textwrap.dedent(
+            """
+            import sys, time
+            sys.path.insert(0, "scripts")
+            from outreach import leadpool
+            with leadpool.pool_lock():
+                print("HELD", flush=True)
+                time.sleep(3)
+            """
+        )
+        holder = subprocess.Popen(
+            ["/opt/homebrew/bin/python3", "-c", holder_code],
+            env=env, cwd=repo, stdout=subprocess.PIPE, text=True,
+        )
+        try:
+            self.assertEqual(holder.stdout.readline().strip(), "HELD")
+            with self.assertRaises(leadpool.PoolLockTimeout):
+                with leadpool.pool_lock(timeout=1):
+                    pass
+        finally:
+            holder.wait(timeout=10)
+
+    def test_lock_is_released_after_use(self):
+        with leadpool.pool_lock(timeout=2):
+            pass
+        with leadpool.pool_lock(timeout=2):
+            pass
+
+
 class StatusTests(PoolIsolationMixin):
     def test_apply_suppression_marks_existing_pool_rows(self):
         leadpool.append_leads([self.lead()], "2026-08-01")
