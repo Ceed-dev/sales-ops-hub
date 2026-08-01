@@ -1,0 +1,12 @@
+{
+  "_comment": "件名 A/B × 送付形式 LP/PDF の配分。3 日サイクルのレポートを見た Zack のフィードバックでのみ更新する。自動では書き換えない。weight は相対値で、合計が 1 でなくてもよい。",
+  "copy_generation": "v2",
+  "updated_at": "2026-08-01",
+  "updated_by": "初期値（均等配分）",
+  "cells": [
+    { "subject_variant": "A", "delivery_variant": "LP", "weight": 1 },
+    { "subject_variant": "A", "delivery_variant": "PDF", "weight": 1 },
+    { "subject_variant": "B", "delivery_variant": "LP", "weight": 1 },
+    { "subject_variant": "B", "delivery_variant": "PDF", "weight": 1 }
+  ]
+}

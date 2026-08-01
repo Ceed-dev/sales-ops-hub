@@ -109,14 +109,60 @@ class AppendLeadsTests(PoolIsolationMixin):
     def test_same_company_different_address_is_excluded(self):
         write_csv(
             self.root / "history" / "past.csv",
-            ["企業名", "送信先"],
-            [{"企業名": "株式会社テスト", "送信先": "other@somewhere.com"}],
+            ["企業名", "送信先", "status"],
+            [
+                {
+                    "企業名": "株式会社テスト",
+                    "送信先": "other@somewhere.com",
+                    "status": "sent",
+                }
+            ],
         )
         stats = leadpool.append_leads(
             [self.lead(email="sales@test-example.com")], "2026-08-01"
         )
         self.assertEqual(stats["added"], 0)
         self.assertEqual(stats["skipped_duplicate_company"], 1)
+
+    def test_unsent_lead_list_is_not_excluded(self):
+        """未送信のリード一覧は在庫であって除外対象ではない。
+
+        接触実績と在庫を区別しないと、取り込み時に全件が除外されて
+        在庫が消える（実際に 2,500 件が 0 件になった回帰）。
+        """
+        write_csv(
+            self.root / "history" / "enrichment-candidates.csv",
+            ["company", "email"],
+            [{"company": "株式会社テスト", "email": "info@test-example.com"}],
+        )
+        stats = leadpool.append_leads([self.lead()], "2026-08-01")
+        self.assertEqual(stats["added"], 1)
+
+    def test_pending_queue_row_is_not_treated_as_contacted(self):
+        write_csv(
+            self.root / "history" / "queue.csv",
+            ["企業名", "送信先", "status", "送信判定"],
+            [
+                {
+                    "企業名": "株式会社テスト",
+                    "送信先": "info@test-example.com",
+                    "status": "pending_send",
+                    "送信判定": "send_ready",
+                }
+            ],
+        )
+        stats = leadpool.append_leads([self.lead()], "2026-08-01")
+        self.assertEqual(stats["added"], 1)
+
+    def test_gmail_message_id_alone_marks_contact(self):
+        write_csv(
+            self.root / "history" / "log.csv",
+            ["送信先", "gmail_message_id"],
+            [{"送信先": "info@test-example.com", "gmail_message_id": "abc123"}],
+        )
+        stats = leadpool.append_leads([self.lead()], "2026-08-01")
+        self.assertEqual(stats["added"], 0)
+        self.assertEqual(stats["skipped_duplicate_email"], 1)
 
     def test_suppressed_address_is_never_added(self):
         write_csv(

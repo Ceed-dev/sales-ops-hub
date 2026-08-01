@@ -184,15 +184,36 @@ def load_suppression() -> tuple[set[str], set[str]]:
     return emails, domains
 
 
+_SENT_TOKENS = {"sent", "送信済み", "送信済"}
+_STATUS_COLUMNS = ("status", "send_status", "送信判定", "prep_status")
+
+
+def was_contacted(row: dict) -> bool:
+    """その行が「実際に送った記録」かを判定する。
+
+    除外の根拠は接触の実績であって、リード一覧に載っていたことではない。
+    未送信のリードまで除外すると在庫が消える（実際に取り込み時に
+    2,500 件すべてが除外され 0 件になった）。
+
+    判定材料は Gmail の message ID か、送信済みを示すステータス。
+    どちらも持たない CSV（enrichment・候補リスト）は在庫として扱う。
+    """
+    if (row.get("gmail_message_id") or "").strip():
+        return True
+    for column in _STATUS_COLUMNS:
+        if (row.get(column) or "").strip().lower() in _SENT_TOKENS:
+            return True
+    return False
+
+
 def load_history_exclusions() -> tuple[set[str], set[str], set[str]]:
     """過去に接触済みのアドレス・企業・ドメインを集める。
 
-    走査対象は config.HISTORY_DIRS 配下の全 CSV と送信ログディレクトリ。
+    走査対象は config.HISTORY_DIRS 配下の全 CSV と送信ログ・キュー。
     列名を見て中身を拾うため、キャンペーンごとに列構成が違っても動く。
 
-    重要: 旧実装は 2 ディレクトリ決め打ちで、2026-07-27 キャンペーンの
-    送信済み 1,500 件が除外対象から漏れていた。ここで取りこぼすと
-    同じ相手に二度送ることになる。
+    旧実装は 2 ディレクトリ決め打ちで、2026-07-27 キャンペーンの
+    送信済み 1,500 件が漏れていた。ここで取りこぼすと二重送信になる。
     """
     emails: set[str] = set()
     companies: set[str] = set()
@@ -206,7 +227,8 @@ def load_history_exclusions() -> tuple[set[str], set[str], set[str]]:
             try:
                 with path.open("r", encoding="utf-8-sig", newline="") as handle:
                     for row in csv.DictReader(handle):
-                        _collect_exclusions(row, emails, companies, domains)
+                        if was_contacted(row):
+                            _collect_exclusions(row, emails, companies, domains)
             except (csv.Error, UnicodeDecodeError, OSError):
                 # 壊れた CSV 1 本で除外全体を落とさない。
                 continue
