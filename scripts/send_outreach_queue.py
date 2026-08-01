@@ -21,23 +21,19 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 
-SENDER_EMAIL = "yusaku.takahashi@ceed.cloud"
-SENDER_NAME = "株式会社Ceed 代表取締役 高橋勇作"
-QUEUE_PATH = Path(
-    "/Users/zacky/ceed-workspace/business/sales-leads-20260722/"
-    "multisector-email-queue-subject-review-20260722.csv"
-)
-SEND_LOG_PATH = Path(
-    "/Users/zacky/ceed-workspace/business/sales-leads-20260722/"
-    "multisector-email-send-log-20260722.csv"
-)
-TOKEN_PATH = Path(
-    "/Users/zacky/Library/Application Support/Ceed/outreach/gmail-oauth.json"
-)
-LOCK_PATH = Path(
-    "/Users/zacky/Library/Application Support/Ceed/outreach/send.lock"
-)
-TIMEZONE = ZoneInfo("Asia/Tokyo")
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from outreach import config  # noqa: E402
+
+SENDER_EMAIL = config.SENDER_EMAIL
+SENDER_NAME = config.SENDER_NAME
+QUEUE_PATH = config.LEGACY_QUEUE_PATH
+SEND_LOG_PATH = config.LEGACY_SEND_LOG_PATH
+TOKEN_PATH = config.TOKEN_PATH
+LOCK_PATH = config.LOCK_PATH
+TIMEZONE = config.TIMEZONE
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 
 
@@ -104,6 +100,9 @@ def build_email(row, recipient=None, subject_prefix=""):
     if offer_variant == "PDF":
         if not attachment_path or not Path(attachment_path).is_file():
             raise ValueError("PDF variant attachment is missing")
+        # 実際に読めるかまで確認する。launchd 起動時は TCC で読み取りだけが
+        # 拒否されることがあり、is_file() では検出できない（2026-07-31 の停止原因）。
+        config.assert_attachment_readable(Path(attachment_path))
     if offer_variant not in {"LP", "PDF"}:
         raise ValueError("unknown delivery variant")
     if row["本文HTML"].count("/t/c/") != 1:
@@ -368,13 +367,19 @@ def run(args):
                 )
             )
             return 0
+        run_date = config.resolve_run_date(args.run_date)
         if not within_start_window(
-            args.run_date,
+            run_date,
             args.start_hour,
             args.start_minute,
             args.start_window_minutes,
         ):
-            raise FatalSendError("outside the authorized start window")
+            raise FatalSendError(
+                "outside the authorized start window "
+                f"(run_date={run_date}, "
+                f"window={args.start_hour:02d}:{args.start_minute:02d}"
+                f"+{args.start_window_minutes}min)"
+            )
 
         sent_count = 0
         error_count = 0
@@ -444,7 +449,9 @@ def parse_args():
     parser.add_argument("--send-log-path", default=str(SEND_LOG_PATH))
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--test-recipient")
-    parser.add_argument("--run-date", default="2026-07-24")
+    # `today` を既定にして、plist へ日付を焼き込む運用をやめる。
+    # 2026-07-24 は 10:59 起動で送信ウィンドウを外し 0 通で終わっている。
+    parser.add_argument("--run-date", default="today")
     parser.add_argument("--start-hour", type=int, default=9)
     parser.add_argument("--start-minute", type=int, default=0)
     parser.add_argument("--start-window-minutes", type=int, default=30)
@@ -463,6 +470,6 @@ if __name__ == "__main__":
     )
     try:
         raise SystemExit(run(parse_args()))
-    except FatalSendError as error:
+    except (FatalSendError, config.AssetAccessError) as error:
         logging.error("%s", error)
         raise SystemExit(1)
