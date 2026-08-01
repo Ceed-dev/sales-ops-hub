@@ -40,12 +40,45 @@ TOKEN_PATH = _env_path("OUTREACH_TOKEN_PATH", STATE_DIR / "gmail-oauth.json")
 LOCK_PATH = _env_path("OUTREACH_LOCK_PATH", STATE_DIR / "send.lock")
 ASSET_DIR = _env_path("OUTREACH_ASSET_DIR", STATE_DIR / "assets")
 
-# --- 送信データ（キュー・送信ログ） -----------------------------------------
+# --- 送信データ -------------------------------------------------------------
+# 日付を含まない安定したルート。日付名ディレクトリ（sales-leads-YYYYMMDD）は
+# 有限バッチ運用の名残で、日次運用と噛み合わないため使わない。
 DATA_ROOT = _env_path(
-    "OUTREACH_DATA_ROOT", "~/ceed-workspace/business/sales-leads-20260727"
+    "OUTREACH_DATA_ROOT", "~/ceed-workspace/business/sales-outreach"
 )
+POOL_DIR = _env_path("OUTREACH_POOL_DIR", DATA_ROOT / "pool")
 QUEUE_DIR = _env_path("OUTREACH_QUEUE_DIR", DATA_ROOT / "queues")
 LOG_DIR = _env_path("OUTREACH_LOG_DIR", DATA_ROOT / "send-logs")
+REPORT_DIR = _env_path("OUTREACH_REPORT_DIR", DATA_ROOT / "reports")
+CACHE_DIR = _env_path("OUTREACH_CACHE_DIR", DATA_ROOT / "cache")
+
+LEADS_POOL_PATH = _env_path("OUTREACH_LEADS_POOL_PATH", POOL_DIR / "leads.csv")
+SEEDS_PATH = _env_path("OUTREACH_SEEDS_PATH", POOL_DIR / "seeds.csv")
+SUPPRESSION_PATH = _env_path(
+    "OUTREACH_SUPPRESSION_PATH", POOL_DIR / "suppression.csv"
+)
+
+# 過去キャンペーンのディレクトリ。重複送信を防ぐ除外元として読み取り専用で参照する。
+# 移動はしない（既存の送信実績がここにしか無いため）。
+HISTORY_DIRS = [
+    Path(raw).expanduser()
+    for raw in _env_str(
+        "OUTREACH_HISTORY_DIRS",
+        "~/ceed-workspace/business/sales-leads-20260713"
+        ":~/ceed-workspace/business/sales-leads-20260722"
+        ":~/ceed-workspace/business/sales-leads-20260727",
+    ).split(":")
+    if raw.strip()
+]
+
+# --- 設定ファイル（リポジトリ管理） -----------------------------------------
+CONFIG_DIR = _env_path("OUTREACH_CONFIG_DIR", REPO_ROOT / "config")
+ALLOCATION_PATH = _env_path(
+    "OUTREACH_ALLOCATION_PATH", CONFIG_DIR / "allocation.json"
+)
+INDUSTRIES_PATH = _env_path(
+    "OUTREACH_INDUSTRIES_PATH", CONFIG_DIR / "industries.json"
+)
 
 # --- 送信者 -----------------------------------------------------------------
 SENDER_EMAIL = _env_str("OUTREACH_SENDER_EMAIL", "yusaku.takahashi@ceed.cloud")
@@ -54,6 +87,55 @@ SENDER_NAME = _env_str(
 )
 
 TIMEZONE = ZoneInfo(_env_str("OUTREACH_TIMEZONE", "Asia/Tokyo"))
+
+# --- 運用パラメータ ---------------------------------------------------------
+DAILY_SEND_TARGET = int(_env_str("OUTREACH_DAILY_SEND_TARGET", "500"))
+# 在庫がこの営業日数分を割ったら警告する。週 2,500 通の消費ペース基準。
+INVENTORY_MIN_BUSINESS_DAYS = int(
+    _env_str("OUTREACH_INVENTORY_MIN_BUSINESS_DAYS", "14")
+)
+# PDCA のサイクル長（営業日）。この日数ごとに判断材料をまとめて出す。
+CYCLE_BUSINESS_DAYS = int(_env_str("OUTREACH_CYCLE_BUSINESS_DAYS", "3"))
+
+# --- 遷移先とトラッキング ---------------------------------------------------
+LP_URL = _env_str("OUTREACH_LP_URL", "https://lp.ceed.cloud/")
+COMPANY_URL = _env_str("OUTREACH_COMPANY_URL", "https://ceed.cloud/")
+TRACKING_BASE_URL = _env_str(
+    "OUTREACH_TRACKING_BASE_URL",
+    "https://sales-ops-bot-863195311806.asia-northeast1.run.app",
+)
+TRACKING_REGISTER_URL = f"{TRACKING_BASE_URL}/internal/email-tracking/recipients"
+
+
+def tracking_summary_url(campaign_id: str) -> str:
+    return (
+        f"{TRACKING_BASE_URL}/internal/email-tracking/campaigns/"
+        f"{campaign_id}/summary"
+    )
+
+
+def tracking_admin_token() -> str:
+    """計測 API の管理トークン。値はログにも例外にも出さない。"""
+    token = os.environ.get("EMAIL_TRACKING_ADMIN_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError(
+            "EMAIL_TRACKING_ADMIN_TOKEN が設定されていない"
+        )
+    return token
+
+
+# --- Slack 通知 -------------------------------------------------------------
+# 未設定でも送信は止めない。notify 側でログ出力にフォールバックする。
+SLACK_CHANNEL = _env_str("OUTREACH_SLACK_CHANNEL", "")
+SLACK_WEBHOOK_URL = _env_str("OUTREACH_SLACK_WEBHOOK_URL", "")
+
+
+def is_business_day(value: date) -> bool:
+    """営業日（月〜金）か。土日に送ると開封されずリードを損なうため送らない。
+
+    祝日は判定しない。祝日対応が必要になった時点で別途判断する。
+    """
+    return value.weekday() < 5
 
 # --- 移行期の既定パス -------------------------------------------------------
 # 日付ベースの新レイアウト（QUEUE_DIR / LOG_DIR）へ移行するまでの間、
