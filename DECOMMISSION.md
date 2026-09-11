@@ -106,8 +106,14 @@ Firestore の全ドキュメントの `createTime` を集計した結果、**新
 | 日時 (JST) | 操作 | 結果 |
 |---|---|---|
 | 2026-09-11 | Telegram Webhook 削除 (`deleteWebhook?drop_pending_updates=true`) | `Webhook was deleted`。`getWebhookInfo` で URL 未設定を確認 |
+| 2026-09-11 | 残骸の網羅確認 | Scheduler は `asia-northeast1` の 2 件のみ (他ロケーション 0)。Hosting `sales-ops-hub.web.app` は **HTTP 404** (未デプロイ)、カスタムドメイン無し。API キー 2 本、サービスアカウント 5 個。**全て本プロジェクト内に閉じている**ことを確認 |
+| 2026-09-11 | **GCP プロジェクト `sales-ops-hub` を削除** | `DELETE_REQUESTED`。Cloud Run / Firestore / Scheduler / Cloud Tasks / Secret Manager / Artifact Registry / GCS / サービスアカウントを含む全リソースが対象。`sales-ops-bot` の URL が **HTTP 404** になったことを確認 |
 
-(以降の作業は実施後に追記)
+**Firestore のデータ (合計約 9,400 件) は控えを取らずに消去した。** 「コードと作業ログは GitHub のみに残す」という駿冴の方針による。復元はできない。
+
+### 関連するが別扱いのもの
+
+GCP プロジェクト一覧に `Lead Conversion Timestamp` という名前の Apps Script 系プロジェクトが 2 つ存在する (`sys-87746295492886303289329225` / `sys-63171755286613312959744128`)。名称から営業/リード関連が疑われるが、**本プロジェクトからの参照は無く、課金も無効**。別途棚卸しの対象とする。
 
 ## 4. 別途手作業が必要なもの
 
